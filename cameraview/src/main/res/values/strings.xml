@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cameraview_default_autofocus_marker">com.sabine.cameraview.markers.DefaultAutoFocusMarker</string>
+
+    <string name="cameraview_filter_none">com.sabine.cameraview.filter.NoFilter</string>
+    <string name="cameraview_filter_autofix">com.sabine.cameraview.filters.AutoFixFilter</string>
+    <string name="cameraview_filter_black_and_white">com.sabine.cameraview.filters.BlackAndWhiteFilter</string>
+    <string name="cameraview_filter_brightness">com.sabine.cameraview.filters.BrightnessFilter</string>
+    <string name="cameraview_filter_contrast">com.sabine.cameraview.filters.ContrastFilter</string>
+    <string name="cameraview_filter_cross_process">com.sabine.cameraview.filters.CrossProcessFilter</string>
+    <string name="cameraview_filter_documentary">com.sabine.cameraview.filters.DocumentaryFilter</string>
+    <string name="cameraview_filter_duotone">com.sabine.cameraview.filters.DuotoneFilter</string>
+    <string name="cameraview_filter_fill_light">com.sabine.cameraview.filters.FillLightFilter</string>
+    <string name="cameraview_filter_gamma">com.sabine.cameraview.filters.GammaFilter</string>
+    <string name="cameraview_filter_grain">com.sabine.cameraview.filters.GrainFilter</string>
+    <string name="cameraview_filter_grayscale">com.sabine.cameraview.filters.GrayscaleFilter</string>
+    <string name="cameraview_filter_hue">com.sabine.cameraview.filters.HueFilter</string>
+    <string name="cameraview_filter_invert_colors">com.sabine.cameraview.filters.InvertColorsFilter</string>
+    <string name="cameraview_filter_lomoish">com.sabine.cameraview.filters.LomoishFilter</string>
+    <string name="cameraview_filter_posterize">com.sabine.cameraview.filters.PosterizeFilter</string>
+    <string name="cameraview_filter_saturation">com.sabine.cameraview.filters.SaturationFilter</string>
+    <string name="cameraview_filter_sepia">com.sabine.cameraview.filters.SepiaFilter</string>
+    <string name="cameraview_filter_sharpness">com.sabine.cameraview.filters.SharpnessFilter</string>
+    <string name="cameraview_filter_temperature">com.sabine.cameraview.filters.TemperatureFilter</string>
+    <string name="cameraview_filter_tint">com.sabine.cameraview.filters.TintFilter</string>
+    <string name="cameraview_filter_vignette">com.sabine.cameraview.filters.VignetteFilter</string>
+</resources>
