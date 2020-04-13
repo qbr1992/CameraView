@@ -3,19 +3,24 @@ package com.sabine.cameraview.engine;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.ImageFormat;
+import android.graphics.PixelFormat;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.location.Location;
+import android.media.CamcorderProfile;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Build;
@@ -24,6 +29,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Range;
@@ -75,6 +82,7 @@ import com.sabine.cameraview.video.Full2VideoRecorder;
 import com.sabine.cameraview.video.SnapshotVideoRecorder;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -373,9 +381,6 @@ public class Camera2Engine extends CameraBaseEngine implements
                 "Internal:", internalFacing,
                 "Cameras:", cameraIds.length);
         for (String cameraId : cameraIds) {
-            Log.e(TAG, "collectCameraInfo: cameraId === " + cameraId);
-        }
-        for (String cameraId : cameraIds) {
             try {
                 CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
                 if (internalFacing == readCharacteristic(characteristics,
@@ -406,12 +411,10 @@ public class Camera2Engine extends CameraBaseEngine implements
         final TaskCompletionSource<CameraOptions> task = new TaskCompletionSource<>();
         try {
             // We have a valid camera for this Facing. Go on.
-            Log.e(TAG, "collectCameraInfo: mCameraId = " + mCameraId + ", mFacing = " + mFacing);
             mManager.openCamera(mCameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice camera) {
                     mCamera = camera;
-                    Log.e(TAG, "collectCameraInfo onOpened: " + mCamera.getId());
 
                     // Set parameters that might have been set before the camera was opened.
                     try {
@@ -1028,10 +1031,9 @@ public class Camera2Engine extends CameraBaseEngine implements
         applyHdr(builder, Hdr.OFF);
         applyZoom(builder, 0F);
         applyExposureCorrection(builder, 0F);
-        applyPreviewFrameRate(builder, 0F);
+        applyPreviewFrameRate(builder, mPreviewFrameRate);
 
-        if (mCameraOptions.stabSupported) {
-            LogUtil.e(TAG, "applyAllParameters: 防抖开启");
+        if (mCameraOptions.isStabSupported()) {
             builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON);
         } else {
             LogUtil.e(TAG, "applyAllParameters: 不支持防抖");
@@ -1375,14 +1377,14 @@ public class Camera2Engine extends CameraBaseEngine implements
     @Override
     public void setPreviewFrameRate(float previewFrameRate) {
         final float oldPreviewFrameRate = mPreviewFrameRate;
-        mPreviewFrameRate = previewFrameRate;
+        mPreviewFrameRate = (int) previewFrameRate;
         mPreviewFrameRateTask = getOrchestrator().scheduleStateful(
                 "preview fps (" + previewFrameRate + ")",
                 CameraState.ENGINE,
                 new Runnable() {
             @Override
             public void run() {
-                if (applyPreviewFrameRate(mRepeatingRequestBuilder, oldPreviewFrameRate)) {
+                if (applyPreviewFrameRate(mRepeatingRequestBuilder, mPreviewFrameRate)) {
                     applyRepeatingRequestBuilder();
                 }
             }
@@ -1391,7 +1393,7 @@ public class Camera2Engine extends CameraBaseEngine implements
 
     @SuppressWarnings("WeakerAccess")
     protected boolean applyPreviewFrameRate(@NonNull CaptureRequest.Builder builder,
-                                            float oldPreviewFrameRate) {
+                                            int oldPreviewFrameRate) {
         //noinspection unchecked
         Range<Integer>[] fallback = new Range[]{};
         Range<Integer>[] fpsRanges = readCharacteristic(
@@ -1400,23 +1402,15 @@ public class Camera2Engine extends CameraBaseEngine implements
         if (mPreviewFrameRate == 0F) {
             // 0F is a special value. Fallback to a reasonable default.
             for (Range<Integer> fpsRange : fpsRanges) {
-                if (fpsRange.contains(30) || fpsRange.contains(24)) {
+                if (fpsRange.contains(30)) {
                     builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange);
                     return true;
                 }
             }
         } else {
-            // If out of boundaries, adjust it.
-            mPreviewFrameRate = Math.min(mPreviewFrameRate,
-                    mCameraOptions.getPreviewFrameRateMaxValue());
-            mPreviewFrameRate = Math.max(mPreviewFrameRate,
-                    mCameraOptions.getPreviewFrameRateMinValue());
-            for (Range<Integer> fpsRange : fpsRanges) {
-                if (fpsRange.contains(Math.round(mPreviewFrameRate))) {
-                    builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange);
-                    return true;
-                }
-            }
+            Range<Integer> fpsRange = new Range<>(mPreviewFrameRate, mPreviewFrameRate);
+            builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange);
+            return true;
         }
         mPreviewFrameRate = oldPreviewFrameRate;
         return false;
@@ -1549,6 +1543,10 @@ public class Camera2Engine extends CameraBaseEngine implements
                 wrapper.addCallback(new CompletionCallback() {
                     @Override
                     protected void onActionCompleted(@NonNull Action a) {
+                        mRepeatingRequestBuilder
+                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
+                        mRepeatingRequestBuilder
+                                .set(CaptureRequest.CONTROL_AWB_LOCK, true);
                         getCallback().dispatchOnFocusEnd(gesture,
                                 action.isSuccessful(), legacyPoint);
                         getOrchestrator().remove("reset metering");
@@ -1595,8 +1593,8 @@ public class Camera2Engine extends CameraBaseEngine implements
                         applyDefaultFocus(holder.getBuilder(this));
                         holder.getBuilder(this)
                                 .set(CaptureRequest.CONTROL_AE_LOCK, false);
-                        holder.getBuilder(this)
-                                .set(CaptureRequest.CONTROL_AWB_LOCK, false);
+//                        holder.getBuilder(this)
+//                                .set(CaptureRequest.CONTROL_AWB_LOCK, false);
                         holder.applyBuilder(this);
                         setState(STATE_COMPLETED);
                         // TODO should wait results?

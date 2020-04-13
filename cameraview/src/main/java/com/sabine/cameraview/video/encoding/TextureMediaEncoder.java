@@ -45,6 +45,8 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
 
     private long mFirstTimeUs = Long.MIN_VALUE;
 
+    private float filterLevel = 0f;
+
     public TextureMediaEncoder(@NonNull TextureConfig config, AudioMediaEncoder audioMediaEncoder) {
         super(config.copy());
         mAudioMediaEncoder = audioMediaEncoder;
@@ -162,7 +164,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
     }
 
     private void onFilter(@NonNull Filter filter) {
-//        mViewport.setFilter(filter);
+        mViewport.setFilter(filter, filterLevel);
     }
 
     private void onFrame(@NonNull Frame frame) {
@@ -255,5 +257,9 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
             mEglCore.release();
             mEglCore = null;
         }
+    }
+
+    public void setFileterLevel(float level) {
+        this.filterLevel = level;
     }
 }

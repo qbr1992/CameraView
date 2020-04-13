@@ -37,6 +37,12 @@ public abstract class FilterCameraPreview<T extends View, Output> extends Camera
     public abstract void setFilterLevel(@NonNull float filterLevel);
 
     /**
+     *
+     * @return filterLevel
+     */
+    public abstract float getFilterLevel();
+
+    /**
      * Returns the currently used filter.
      * @return currently used filter
      */

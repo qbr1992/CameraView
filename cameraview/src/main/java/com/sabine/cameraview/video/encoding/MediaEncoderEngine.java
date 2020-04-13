@@ -279,7 +279,7 @@ public class MediaEncoderEngine {
                         @Override
                         public void run() {
                             mMediaMuxerStartStatus = 1;
-                            if (mListener != null) {
+                            if (mListener != null && getVideoEncoder().getEncodedBitRate() != getVideoEncoder().getVideoConfig().bitRate) {
                                 mListener.onEncodingStart(getVideoEncoder().getEncodedBitRate());
                             }
                         }

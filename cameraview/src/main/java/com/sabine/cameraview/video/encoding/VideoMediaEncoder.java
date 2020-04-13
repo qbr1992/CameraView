@@ -101,7 +101,6 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
             format.setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel31);
         }
 
-        Log.e(TAG, "onPrepare: " + format);
         try {
             if (mConfig.encoder != null) {
                 mMediaCodec = MediaCodec.createByCodecName(mConfig.encoder);
@@ -113,7 +112,6 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
             mMediaCodec.start();
             if (onPrepareListener != null) onPrepareListener.onPrepareSuccess();
         } catch (Exception e) {
-            Log.e(TAG, "onPrepare: " + e.toString());
             mMediaCodec = null;
             mVideoRealBitrate -= 10 * 1000 * 1000;
             onPrepare(onPrepareListener);
@@ -177,7 +175,6 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
 
     @Override
     protected int getEncodedBitRate() {
-        Log.e(TAG, "getEncodedBitRate: mVideoRealBitrate = " + mVideoRealBitrate);
         return mVideoRealBitrate;
     }
 

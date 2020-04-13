@@ -18,6 +18,8 @@ import com.sabine.cameraview.utils.LogUtil;
  */
 class AudioTimestamp {
 
+    public static final String TAG = AudioTimestamp.class.getSimpleName();
+
     static long bytesToUs(long bytes, int byteRate) {
         return (1000000L * bytes) / byteRate;
     }
@@ -36,7 +38,7 @@ class AudioTimestamp {
     }
 
     public void setBaseTimeUs(long baseTimeUs) {
-        LogUtil.e("aaa", "drainOutput: baseTimeUs === " + baseTimeUs);
+        LogUtil.e(TAG, "drainOutput: baseTimeUs === " + baseTimeUs);
         this.mBaseTimeUs = baseTimeUs;
     }
 

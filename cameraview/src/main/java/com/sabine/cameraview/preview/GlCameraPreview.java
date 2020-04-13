@@ -148,7 +148,7 @@ public class GlCameraPreview extends FilterCameraPreview<GLSurfaceView, SurfaceT
             if (mCurrentFilter == null) {
                 mCurrentFilter = new NoFilter();
             }
-            mOutputViewport = new EglViewport(mCurrentFilter, mCurrentFilterLevel);
+            mOutputViewport = new EglViewport(mCurrentFilter);
             mOutputTextureId = mOutputViewport.createTexture();
             mInputSurfaceTexture = new SurfaceTexture(mOutputTextureId);
             getView().queueEvent(new Runnable() {
@@ -370,4 +370,11 @@ public class GlCameraPreview extends FilterCameraPreview<GLSurfaceView, SurfaceT
     public void setFilterLevel(@NonNull float filterLevel) {
         mCurrentFilterLevel = filterLevel;
     }
+
+    @Override
+    public float getFilterLevel() {
+        return mCurrentFilterLevel;
+    }
+
+
 }

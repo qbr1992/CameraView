@@ -1578,7 +1578,6 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         if (options != null) {
             Collection<Size> sizes = options.getSupportedVideoSizes();
             for (Size size : sizes) {
-                Log.e(TAG, "isSupport4K: " + size);
                 if ((size.getWidth() >= 3840 && size.getHeight() >= 2160) || (size.getWidth() >= 2160 && size.getHeight() >= 3840)) {
                     return true;
                 }
@@ -1628,6 +1627,14 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      */
     public float getPreviewFrameRate() {
         return mCameraEngine.getPreviewFrameRate();
+    }
+
+    public float getPreviewMaxFrameRate() {
+        return mCameraEngine.getMaxPreviewFrameRate();
+    }
+
+    public float getPreviewMinFrameRate() {
+        return mCameraEngine.getMinPreviewFrameRate();
     }
 
     /**
@@ -1748,9 +1755,9 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         return 0;
     }
 
-    private boolean flip = false;
+    private boolean flip = true;
     public void setFlip(boolean flip) {
-        this.flip = flip;
+        this.flip = true;
     }
 
     public boolean isFlip() {

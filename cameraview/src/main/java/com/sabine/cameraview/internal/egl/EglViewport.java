@@ -25,20 +25,15 @@ public class EglViewport {
 
     private Filter mFilter;
     private Filter mPendingFilter;
-    private float filterLevel;
 
     public EglViewport() {
-        this(new NoFilter(), 0);
+        this(new NoFilter());
     }
 
-    public EglViewport(@NonNull Filter filter, float filterLevel) {
+    public EglViewport(@NonNull Filter filter) {
         mTextureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES;
         mTextureUnit = GLES20.GL_TEXTURE0;
         mFilter = filter;
-        this.filterLevel = filterLevel;
-        if (mFilter instanceof OneParameterFilter) {
-            ((OneParameterFilter) mFilter).setParameter1(filterLevel);
-        }
         createProgram();
     }
 

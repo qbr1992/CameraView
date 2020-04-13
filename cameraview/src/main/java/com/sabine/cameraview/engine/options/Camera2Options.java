@@ -105,7 +105,6 @@ public class Camera2Options extends CameraOptions {
         int[] stabs = cameraCharacteristics.get(LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION);
         if (stabs != null) {
             for (int stab : stabs) {
-                Log.e("aaa", "Camera2Options: stab = " + stab);
                 if (stab == CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON) {
                     stabSupported = true;
                     break;
@@ -184,6 +183,7 @@ public class Camera2Options extends CameraOptions {
             previewFrameRateMinValue = Float.MAX_VALUE;
             previewFrameRateMaxValue = -Float.MAX_VALUE;
             for (Range<Integer> fpsRange : range) {
+//                Log.e("aaa", "Camera2Options: fpsRange === " + fpsRange);
                 previewFrameRateMinValue = Math.min(previewFrameRateMinValue, fpsRange.getLower());
                 previewFrameRateMaxValue = Math.max(previewFrameRateMaxValue, fpsRange.getUpper());
             }

@@ -69,7 +69,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @SuppressWarnings("WeakerAccess") protected boolean mPlaySounds;
     @SuppressWarnings("WeakerAccess") protected boolean mPictureMetering;
     @SuppressWarnings("WeakerAccess") protected boolean mPictureSnapshotMetering;
-    @SuppressWarnings("WeakerAccess") protected float mPreviewFrameRate;
+    @SuppressWarnings("WeakerAccess") protected int mPreviewFrameRate;
 
     private FrameManager mFrameManager;
     private final Angles mAngles = new Angles();
@@ -422,6 +422,16 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @Override
     public final float getPreviewFrameRate() {
         return mPreviewFrameRate;
+    }
+
+    public final float getMaxPreviewFrameRate() {
+        if (mCameraOptions == null) return 0;
+        return mCameraOptions.getPreviewFrameRateMaxValue();
+    }
+
+    public final float getMinPreviewFrameRate() {
+        if (mCameraOptions == null) return 0;
+        return mCameraOptions.getPreviewFrameRateMinValue();
     }
 
     @Override
@@ -820,7 +830,6 @@ public abstract class CameraBaseEngine extends CameraEngine {
 //            throw new RuntimeException("SizeSelectors must not return Sizes other than " +
 //                    "those in the input list.");
 //        }
-        LOG.e("computeCaptureSize:", "result:", result, "flip:", flip, "mode:", mode);
         if (flip) result = result.flip(); // Go back to REF_SENSOR
         return result;
     }
@@ -845,7 +854,6 @@ public abstract class CameraBaseEngine extends CameraEngine {
         boolean flip = getAngles().flip(Reference.SENSOR, Reference.VIEW);
         List<Size> sizes = new ArrayList<>(previewSizes.size());
         for (Size size : previewSizes) {
-            Log.e(TAG, "computePreviewStreamSize: " + size);
             sizes.add(flip ? size.flip() : size);
         }
 

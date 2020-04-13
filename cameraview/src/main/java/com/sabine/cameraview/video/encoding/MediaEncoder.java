@@ -505,7 +505,6 @@ public abstract class MediaEncoder {
     @SuppressWarnings("WeakerAccess")
     public final void notifyFirstFrameMillis(long firstFrameMillis) {
         mStartTimeUs = firstFrameMillis;
-        Log.e(TAG, "drainOutput notifyFirstFrameMillis: mStartTimeUs === " + mStartTimeUs);
     }
 
     /**

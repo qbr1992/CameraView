@@ -44,7 +44,7 @@ public abstract class CameraOptions {
     protected Set<Integer> supportedFrameProcessingFormats = new HashSet<>(2);
 
     protected boolean zoomSupported;
-    public boolean stabSupported;
+    protected boolean stabSupported;
     protected float zoomMaxValue;
     protected boolean exposureCorrectionSupported;
     protected float exposureCorrectionMinValue;
@@ -251,6 +251,14 @@ public abstract class CameraOptions {
         return zoomMaxValue;
     }
 
+    /**
+     * Whether stabilization is supported.
+     *
+     * @return whether stabilization is supported.
+     */
+    public boolean isStabSupported() {
+        return stabSupported;
+    }
 
     /**
      * Whether touch metering (metering with respect to a specific region of the screen) is

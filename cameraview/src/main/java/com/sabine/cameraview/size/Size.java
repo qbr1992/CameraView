@@ -1,5 +1,8 @@
 package com.sabine.cameraview.size;
 
+import android.media.CamcorderProfile;
+import android.util.Range;
+
 import androidx.annotation.NonNull;
 
 /**
@@ -9,6 +12,7 @@ public class Size implements Comparable<Size> {
 
     private final int mWidth;
     private final int mHeight;
+    private int mFps;
 
     public Size(int width, int height) {
         mWidth = width;
@@ -32,6 +36,14 @@ public class Size implements Comparable<Size> {
     @SuppressWarnings("SuspiciousNameCombination")
     public Size flip() {
         return new Size(mHeight, mWidth);
+    }
+
+    public int getFps() {
+        return mFps;
+    }
+
+    public void setFps(int fps) {
+        mFps = fps;
     }
 
     @Override
@@ -63,6 +75,24 @@ public class Size implements Comparable<Size> {
     @Override
     public int compareTo(@NonNull Size another) {
         return mWidth * mHeight - another.mWidth * another.mHeight;
+    }
+
+    public boolean hasHighSpeedCamcorder(int cameraId) {
+        return hasHighSpeedCamcorder(this, cameraId);
+    }
+
+    public boolean hasHighSpeedCamcorder(Size size, int cameraID) {
+        if (size.getWidth() == 720 && size.getHeight() == 480) {
+            return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_480P);
+        } else if (size.getWidth() == 1280 && size.getHeight() == 720) {
+            return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_720P);
+        } else if (size.getWidth() == 1920 && size.getHeight() == 1080) {
+            return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_1080P);
+        } else if (size.getWidth() == 3840 && size.getHeight() == 2160) {
+            return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_2160P);
+        } else {
+            return false;
+        }
     }
 
 }

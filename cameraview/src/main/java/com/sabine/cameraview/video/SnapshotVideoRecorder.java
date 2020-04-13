@@ -130,6 +130,7 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
         synchronized (mEncoderEngineLock) {
             if (mEncoderEngine != null) {
                 mEncoderEngine.notify(TextureMediaEncoder.FILTER_EVENT, mCurrentFilter);
+                if (textureMediaEncoder != null) textureMediaEncoder.setFileterLevel(filterLevel);
             }
         }
     }
@@ -248,6 +249,7 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
                         audioMediaEncoder,
                         SnapshotVideoRecorder.this);
                 mEncoderEngine.notify(TextureMediaEncoder.FILTER_EVENT, mCurrentFilter);
+                if (textureMediaEncoder != null) textureMediaEncoder.setFileterLevel(mPreview.getFilterLevel());
                 mEncoderEngine.start();
                 dispatchVideoRecordingStart();
             }

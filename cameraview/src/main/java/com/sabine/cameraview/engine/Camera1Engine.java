@@ -699,7 +699,7 @@ public class Camera1Engine extends CameraBaseEngine implements
     @Override
     public void setPreviewFrameRate(float previewFrameRate) {
         final float old = previewFrameRate;
-        mPreviewFrameRate = previewFrameRate;
+        mPreviewFrameRate = (int) previewFrameRate;
         mPreviewFrameRateTask = getOrchestrator().scheduleStateful(
                 "preview fps (" + previewFrameRate + ")",
                 CameraState.ENGINE,
@@ -727,21 +727,21 @@ public class Camera1Engine extends CameraBaseEngine implements
             }
         } else {
             // If out of boundaries, adjust it.
-            mPreviewFrameRate = Math.min(mPreviewFrameRate,
-                    mCameraOptions.getPreviewFrameRateMaxValue());
-            mPreviewFrameRate = Math.max(mPreviewFrameRate,
-                    mCameraOptions.getPreviewFrameRateMinValue());
-            for (int[] fpsRange : fpsRanges) {
-                float lower = (float) fpsRange[0] / 1000F;
-                float upper = (float) fpsRange[1] / 1000F;
-                float rate = Math.round(mPreviewFrameRate);
-                if (lower <= rate && rate <= upper) {
-                    params.setPreviewFpsRange(fpsRange[0], fpsRange[1]);
-                    return true;
-                }
-            }
+//            mPreviewFrameRate = Math.min(mPreviewFrameRate,
+//                    mCameraOptions.getPreviewFrameRateMaxValue());
+//            mPreviewFrameRate = Math.max(mPreviewFrameRate,
+//                    mCameraOptions.getPreviewFrameRateMinValue());
+//            for (int[] fpsRange : fpsRanges) {
+//                float lower = (float) fpsRange[0] / 1000F;
+//                float upper = (float) fpsRange[1] / 1000F;
+//                float rate = Math.round(mPreviewFrameRate);
+//                if (lower <= rate && rate <= upper) {
+//                    params.setPreviewFpsRange(fpsRange[0], fpsRange[1]);
+//                    return true;
+//                }
+//            }
         }
-        mPreviewFrameRate = oldPreviewFrameRate;
+        mPreviewFrameRate = (int) oldPreviewFrameRate;
         return false;
     }
 
