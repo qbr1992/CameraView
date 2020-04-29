@@ -74,8 +74,8 @@ public abstract class CameraBaseEngine extends CameraEngine {
     private FrameManager mFrameManager;
     private final Angles mAngles = new Angles();
 //    @Nullable private Size mPreviewStreamSize;
-    private Size mPictureSize;
-    private Size mVideoSize;
+    protected Size mPictureSize;
+    protected Size mVideoSize;
     protected Facing mFacing = Facing.FRONT;
     private Mode mMode;
     private Audio mAudio;
@@ -88,6 +88,8 @@ public abstract class CameraBaseEngine extends CameraEngine {
     private int mFrameProcessingMaxHeight; // in REF_VIEW like SizeSelectors
     private int mFrameProcessingPoolSize;
     private Overlay mOverlay;
+    boolean supportHighSpeed = false;
+    boolean supportDuoCamera = false;
 
     // Ops used for testing.
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mZoomTask
@@ -332,6 +334,16 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @Override
     public final Facing getFacing() {
         return mFacing;
+    }
+
+    @Override
+    public boolean supportHighSpeed() {
+        return supportHighSpeed;
+    }
+
+    @Override
+    public boolean supportDuoCamera() {
+        return supportDuoCamera;
     }
 
     /**
@@ -830,6 +842,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
 //            throw new RuntimeException("SizeSelectors must not return Sizes other than " +
 //                    "those in the input list.");
 //        }
+        LOG.e("computeCaptureSize:", "result:", result, "flip:", flip, "mode:", mode);
         if (flip) result = result.flip(); // Go back to REF_SENSOR
         return result;
     }
@@ -854,6 +867,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
         boolean flip = getAngles().flip(Reference.SENSOR, Reference.VIEW);
         List<Size> sizes = new ArrayList<>(previewSizes.size());
         for (Size size : previewSizes) {
+            Log.e(TAG, "computePreviewStreamSize: " + size);
             sizes.add(flip ? size.flip() : size);
         }
 

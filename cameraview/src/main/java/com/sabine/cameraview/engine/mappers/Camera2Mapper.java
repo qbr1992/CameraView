@@ -41,7 +41,9 @@ public class Camera2Mapper {
     private static final Map<Hdr, Integer> HDR = new HashMap<>();
 
     static {
-        FACING.put(Facing.BACK, CameraCharacteristics.LENS_FACING_BACK);
+        FACING.put(Facing.BACK_NORMAL, CameraCharacteristics.LENS_FACING_BACK);
+        FACING.put(Facing.BACK_TELE, CameraCharacteristics.LENS_FACING_BACK);
+        FACING.put(Facing.BACK_WIDE, CameraCharacteristics.LENS_FACING_BACK);
         FACING.put(Facing.FRONT, CameraCharacteristics.LENS_FACING_FRONT);
         WB.put(WhiteBalance.AUTO, CameraCharacteristics.CONTROL_AWB_MODE_AUTO);
         WB.put(WhiteBalance.CLOUDY, CameraCharacteristics.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT);

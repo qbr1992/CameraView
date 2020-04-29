@@ -101,6 +101,7 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
             format.setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel31);
         }
 
+        Log.e(TAG, "onPrepare: " + format);
         try {
             if (mConfig.encoder != null) {
                 mMediaCodec = MediaCodec.createByCodecName(mConfig.encoder);
@@ -112,9 +113,12 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
             mMediaCodec.start();
             if (onPrepareListener != null) onPrepareListener.onPrepareSuccess();
         } catch (Exception e) {
-            mMediaCodec = null;
-            mVideoRealBitrate -= 10 * 1000 * 1000;
-            onPrepare(onPrepareListener);
+            Log.e(TAG, "onPrepare: " + e.toString());
+            if (e instanceof IllegalArgumentException) { // 这个错误是视频码率参数不支持导致的，需要降码率
+                mMediaCodec = null;
+                mVideoRealBitrate -= 10 * 1000 * 1000;
+                if (mVideoRealBitrate > 0) onPrepare(onPrepareListener);
+            }
         }
     }
 
@@ -175,6 +179,7 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
 
     @Override
     protected int getEncodedBitRate() {
+        Log.e(TAG, "getEncodedBitRate: mVideoRealBitrate = " + mVideoRealBitrate);
         return mVideoRealBitrate;
     }
 

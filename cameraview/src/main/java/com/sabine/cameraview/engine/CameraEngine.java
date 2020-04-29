@@ -101,7 +101,7 @@ import java.util.concurrent.TimeUnit;
  *
  * For convenience, the two main method {@link #onStartEngine()} and {@link #onStopEngine()}
  * are already called on the engine thread, but they can still be asynchronous by returning a
- * Google's {@link Task}.
+ * Google's {@link com.google.android.gms.tasks.Task}.
  */
 public abstract class CameraEngine implements
         CameraPreview.SurfaceCallback,
@@ -701,6 +701,8 @@ public abstract class CameraEngine implements
     @NonNull public abstract PictureFormat getPictureFormat();
 
     public abstract void setPreviewFrameRate(float previewFrameRate);
+    public abstract boolean supportHighSpeed();
+    public abstract boolean supportDuoCamera();
     public abstract float getPreviewFrameRate();
     public abstract float getMaxPreviewFrameRate();
     public abstract float getMinPreviewFrameRate();

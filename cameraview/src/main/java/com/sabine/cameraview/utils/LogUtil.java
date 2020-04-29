@@ -102,10 +102,10 @@ public class LogUtil {
     private static String getLogPath() {
         String path = "";
         // 获取扩展SD卡设备状�??
-        String sDStateString = Environment.getExternalStorageState();
+        String sDStateString = android.os.Environment.getExternalStorageState();
 
         // 拥有可读可写权限
-        if (sDStateString.equals(Environment.MEDIA_MOUNTED)) {
+        if (sDStateString.equals(android.os.Environment.MEDIA_MOUNTED)) {
             // 获取扩展存储设备的文件目�??
             path = Environment.getExternalStorageDirectory() + File.separator + "SmartMike" + File.separator
                     + MYLOG_PATH_SDCARD_DIR;

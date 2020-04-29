@@ -72,7 +72,7 @@ public class OverlayLayout extends FrameLayout implements Overlay {
      * @return our params
      */
     @Override
-    public LayoutParams generateLayoutParams(AttributeSet attrs) {
+    public OverlayLayout.LayoutParams generateLayoutParams(AttributeSet attrs) {
         return new LayoutParams(getContext(), attrs);
     }
 

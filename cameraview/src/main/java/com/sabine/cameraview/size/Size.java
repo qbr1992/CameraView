@@ -82,13 +82,13 @@ public class Size implements Comparable<Size> {
     }
 
     public boolean hasHighSpeedCamcorder(Size size, int cameraID) {
-        if (size.getWidth() == 720 && size.getHeight() == 480) {
-            return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_480P);
-        } else if (size.getWidth() == 1280 && size.getHeight() == 720) {
+        if (size.getWidth() == 540 && size.getHeight() == 960) {
+            return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_LOW);
+        } else if (size.getWidth() == 720 && size.getHeight() == 1280) {
             return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_720P);
-        } else if (size.getWidth() == 1920 && size.getHeight() == 1080) {
+        } else if (size.getWidth() == 1080 && size.getHeight() == 1920) {
             return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_1080P);
-        } else if (size.getWidth() == 3840 && size.getHeight() == 2160) {
+        } else if (size.getWidth() == 2160 && size.getHeight() == 3840) {
             return CamcorderProfile.hasProfile(cameraID, CamcorderProfile.QUALITY_HIGH_SPEED_2160P);
         } else {
             return false;

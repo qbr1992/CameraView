@@ -3,21 +3,18 @@ package com.sabine.cameraview.engine;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.ImageFormat;
-import android.graphics.PixelFormat;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.location.Location;
 import android.media.CamcorderProfile;
@@ -30,14 +27,12 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Range;
 import android.util.Rational;
 import android.view.Surface;
 import android.view.SurfaceHolder;
-import android.widget.Toast;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
@@ -74,7 +69,6 @@ import com.sabine.cameraview.metering.MeteringRegions;
 import com.sabine.cameraview.picture.Full2PictureRecorder;
 import com.sabine.cameraview.picture.Snapshot2PictureRecorder;
 import com.sabine.cameraview.preview.GlCameraPreview;
-import com.sabine.cameraview.preview.TextureCameraPreview;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
 import com.sabine.cameraview.utils.LogUtil;
@@ -82,8 +76,9 @@ import com.sabine.cameraview.video.Full2VideoRecorder;
 import com.sabine.cameraview.video.SnapshotVideoRecorder;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.Stack;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -369,6 +364,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     @Override
     protected final boolean collectCameraInfo(@NonNull Facing facing) {
         int internalFacing = mMapper.mapFacing(facing);
+        Log.e(TAG, "collectCameraInfo: facing = " + facing + ", internalFacing = " + internalFacing);
         String[] cameraIds = null;
         try {
             cameraIds = mManager.getCameraIdList();
@@ -377,15 +373,52 @@ public class Camera2Engine extends CameraBaseEngine implements
             // However, let's launch an unrecoverable exception.
             throw createCameraException(e);
         }
+        Set<String> ids = null;
+        supportDuoCamera = false;
         LOG.e(TAG, "Facing:", facing,
                 "Internal:", internalFacing,
                 "Cameras:", cameraIds.length);
         for (String cameraId : cameraIds) {
             try {
                 CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
+                if (readCharacteristic(characteristics,
+                        CameraCharacteristics.LENS_FACING, -99) == CameraCharacteristics.LENS_FACING_BACK) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                        ids = characteristics.getPhysicalCameraIds();
+                        if (ids.size() >= 3) {
+                            supportDuoCamera = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        for (String cameraId : cameraIds) {
+            try {
+                CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
                 if (internalFacing == readCharacteristic(characteristics,
                         CameraCharacteristics.LENS_FACING, -99)) {
-                    mCameraId = cameraId;
+                    if (facing != Facing.FRONT) {
+                        if (ids != null && ids.size() >= 3) {
+                            switch (facing) {
+                                case BACK_NORMAL:
+                                    mCameraId = (String) ids.toArray()[0];
+                                    break;
+                                case BACK_WIDE:
+                                    mCameraId = (String) ids.toArray()[1];
+                                    break;
+                                case BACK_TELE:
+                                    mCameraId = (String) ids.toArray()[2];
+                                    break;
+                            }
+                        } else {
+                            mCameraId = cameraId;
+                        }
+                    } else {
+                        mCameraId = cameraId;
+                    }
                     int sensorOffset = readCharacteristic(characteristics,
                             CameraCharacteristics.SENSOR_ORIENTATION, 0);
                     getAngles().setSensorOffset(facing, sensorOffset);
@@ -411,15 +444,28 @@ public class Camera2Engine extends CameraBaseEngine implements
         final TaskCompletionSource<CameraOptions> task = new TaskCompletionSource<>();
         try {
             // We have a valid camera for this Facing. Go on.
+            Log.e(TAG, "collectCameraInfo: mCameraId = " + mCameraId + ", mFacing = " + mFacing);
             mManager.openCamera(mCameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice camera) {
                     mCamera = camera;
+                    Log.e(TAG, "collectCameraInfo onOpened: " + mCamera.getId());
 
                     // Set parameters that might have been set before the camera was opened.
                     try {
                         LOG.i("onStartEngine:", "Opened camera device.");
                         mCameraCharacteristics = mManager.getCameraCharacteristics(mCameraId);
+
+                        StreamConfigurationMap map = mCameraCharacteristics
+                                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+                        supportHighSpeed = false;
+                        if (map != null) {
+                            if (mVideoSize != null && mVideoSize.hasHighSpeedCamcorder(CameraMetadata.LENS_FACING_FRONT)) {
+                                supportHighSpeed = true;
+                            }
+                        }
+
                         boolean flip = getAngles().flip(Reference.SENSOR, Reference.VIEW);
                         int format;
                         switch (mPictureFormat) {
@@ -871,7 +917,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                     new Runnable() {
                 @Override
                 public void run() {
-                    unlockAndResetMetering();
+//                    unlockAndResetMetering();
                 }
             });
         }
@@ -1334,6 +1380,10 @@ public class Camera2Engine extends CameraBaseEngine implements
                                       @NonNull final float[] bounds,
                                       @Nullable final PointF[] points,
                                       final boolean notify) {
+        getOrchestrator().remove("reset AE");
+        mRepeatingRequestBuilder
+                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+        applyRepeatingRequestBuilder();
         final float old = mExposureCorrectionValue;
         mExposureCorrectionValue = EVvalue;
         mExposureCorrectionTask = getOrchestrator().scheduleStateful(
@@ -1350,6 +1400,18 @@ public class Camera2Engine extends CameraBaseEngine implements
                 }
             }
         });
+        getOrchestrator().scheduleStatefulDelayed("reset AE",
+                CameraState.PREVIEW,
+                200,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        mRepeatingRequestBuilder
+                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
+                        applyDefaultFocus(mRepeatingRequestBuilder);
+                        applyRepeatingRequestBuilder();
+                    }
+                });
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -1399,6 +1461,9 @@ public class Camera2Engine extends CameraBaseEngine implements
         Range<Integer>[] fpsRanges = readCharacteristic(
                 CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES,
                 fallback);
+        for (Range<Integer> fpsRange : fpsRanges) {
+            Log.e(TAG, "applyPreviewFrameRate: fpsRange = " + fpsRange);
+        }
         if (mPreviewFrameRate == 0F) {
             // 0F is a special value. Fallback to a reasonable default.
             for (Range<Integer> fpsRange : fpsRanges) {
@@ -1409,6 +1474,7 @@ public class Camera2Engine extends CameraBaseEngine implements
             }
         } else {
             Range<Integer> fpsRange = new Range<>(mPreviewFrameRate, mPreviewFrameRate);
+            Log.e(TAG, "applyPreviewFrameRate: mPreviewFrameRate fpsRange = " + fpsRange);
             builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange);
             return true;
         }
@@ -1543,10 +1609,6 @@ public class Camera2Engine extends CameraBaseEngine implements
                 wrapper.addCallback(new CompletionCallback() {
                     @Override
                     protected void onActionCompleted(@NonNull Action a) {
-                        mRepeatingRequestBuilder
-                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
-                        mRepeatingRequestBuilder
-                                .set(CaptureRequest.CONTROL_AWB_LOCK, true);
                         getCallback().dispatchOnFocusEnd(gesture,
                                 action.isSuccessful(), legacyPoint);
                         getOrchestrator().remove("reset metering");

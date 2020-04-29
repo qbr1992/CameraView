@@ -38,7 +38,7 @@ import java.util.List;
  * 1. {@link #MODE_RESPECT_ORDER}
  *
  * Chooses the encoder as the first one that matches the given mime type.
- * This is what {@link MediaCodec#createEncoderByType(String)} does,
+ * This is what {@link android.media.MediaCodec#createEncoderByType(String)} does,
  * and what {@link android.media.MediaRecorder} also does when recording.
  *
  * The list is ordered based on the encoder definitions in system/etc/media_codecs.xml,

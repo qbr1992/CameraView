@@ -689,22 +689,22 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @Override
     public void onExposure(float exposureValue, float[] bounds, PointF[] exposurePoint) {
         mCameraEngine.setExposureCorrection(exposureValue, bounds, exposurePoint, true);
-        if (sensorController == null) {
-            //重力感应 监听相机镜头移动
-            sensorController = SensorController.getInstance(this.getContext());
-            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
-                @Override
-                public void onFocus() {
-                    if (!sensorController.isFocusLocked()) {
-                        //移动后切换连续自动对焦
-                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
-                        sensorController.stop();
-                        sensorController = null;
-                    }
-                }
-            });
-            sensorController.start();
-        }
+//        if (sensorController == null) {
+//            //重力感应 监听相机镜头移动
+//            sensorController = SensorController.getInstance(this.getContext());
+//            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
+//                @Override
+//                public void onFocus() {
+//                    if (!sensorController.isFocusLocked()) {
+//                        //移动后切换连续自动对焦
+//                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
+//                        sensorController.stop();
+//                        sensorController = null;
+//                    }
+//                }
+//            });
+//            sensorController.start();
+//        }
     }
 
     // Some gesture layout detected a gesture. It's not known at this moment:
@@ -1262,7 +1262,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * Sets which camera sensor should be used.
      *
      * @see Facing#FRONT
-     * @see Facing#BACK
+     * @see Facing#BACK_NORMAL
      *
      * @param facing a facing value.
      */
@@ -1280,7 +1280,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     /**
-     * Toggles the facing value between {@link Facing#BACK}
+     * Toggles the facing value between {@link Facing#BACK_NORMAL}
      * and {@link Facing#FRONT}.
      *
      * @return the new facing value
@@ -1288,12 +1288,12 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     public Facing toggleFacing() {
         Facing facing = mCameraEngine.getFacing();
         switch (facing) {
-            case BACK:
+            case BACK_NORMAL:
                 setFacing(Facing.FRONT);
                 break;
 
             case FRONT:
-                setFacing(Facing.BACK);
+                setFacing(Facing.BACK_NORMAL);
                 break;
         }
 
@@ -1583,6 +1583,16 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                 }
             }
         }
+        return false;
+    }
+
+    public boolean supportHighSpeedPreview() {
+        if (mCameraEngine != null) return mCameraEngine.supportHighSpeed();
+        return false;
+    }
+
+    public boolean supportDuoCamera() {
+        if (mCameraEngine != null) return mCameraEngine.supportDuoCamera();
         return false;
     }
 
@@ -2645,7 +2655,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     public boolean isCameraBackForward() {
-        return getFacing() == Facing.BACK;
+        return getFacing() != Facing.FRONT;
     }
 
     public void putAudioPcm(byte[] pcm, int length, boolean isEndOfStream) {

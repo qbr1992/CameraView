@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Wraps the {@link CamcorderProfile} static utilities.
+ * Wraps the {@link android.media.CamcorderProfile} static utilities.
  */
 public class CamcorderProfiles {
 

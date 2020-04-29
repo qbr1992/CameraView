@@ -392,7 +392,7 @@ public class FocusLayout extends View {
 
     // 曝光的调节
     private void actionMoveProgressExposure(MotionEvent event) {
-        if (isExposureThumbOnDragging) {
+        if (isExposureThumbOnDragging && !isClear) {
             exposureThumbCenterY = event.getY() + dy;
             if (exposureThumbCenterY < exposureTop) {
                 exposureThumbCenterY = exposureTop;

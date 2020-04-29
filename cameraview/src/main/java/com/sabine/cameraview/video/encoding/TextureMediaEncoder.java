@@ -164,7 +164,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
     }
 
     private void onFilter(@NonNull Filter filter) {
-        mViewport.setFilter(filter, filterLevel);
+        if (mViewport != null) mViewport.setFilter(filter, filterLevel);
     }
 
     private void onFrame(@NonNull Frame frame) {
@@ -226,12 +226,12 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
                 "isRecording:", isRecording(),
                 "thread:", Thread.currentThread(),
                 "- gl rendering.");
-        mViewport.drawFrame(frame.timestampUs(), mConfig.textureId, transform);
+        if (mViewport != null) mViewport.drawFrame(frame.timestampUs(), mConfig.textureId, transform);
         if (mConfig.hasOverlay()) {
             mConfig.overlayDrawer.render(frame.timestampUs());
         }
-        mWindow.setPresentationTime(frame.timestampNanos);
-        mWindow.swapBuffers();
+        if (mWindow != null) mWindow.setPresentationTime(frame.timestampNanos);
+        if (mWindow != null) mWindow.swapBuffers();
         mFramePool.recycle(frame);
         LOG.i("onEvent -",
                 "frameNumber:", mFrameNumber,

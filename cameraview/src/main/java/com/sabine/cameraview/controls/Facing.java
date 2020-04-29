@@ -19,25 +19,39 @@ public enum Facing implements Control {
     /**
      * Back-facing camera sensor.
      */
-    BACK(0),
+    BACK_NORMAL(0),
+
+    /**
+     * Back-facing camera sensor.
+     */
+    BACK_TELE(1),
+
+    /**
+     * Back-facing camera sensor.
+     */
+    BACK_WIDE(2),
 
     /**
      * Front-facing camera sensor.
      */
-    FRONT(1);
+    FRONT(3);
 
     @NonNull
     static Facing DEFAULT(@Nullable Context context) {
         if (context == null) {
-            return BACK;
-        } else if (CameraUtils.hasCameraFacing(context, BACK)) {
-            return BACK;
-        } else if (CameraUtils.hasCameraFacing(context, FRONT)) {
+            return BACK_NORMAL;
+        } else if (CameraUtils.hasCameraFacing(context, BACK_NORMAL)) {
+            return BACK_NORMAL;
+        } else if (CameraUtils.hasCameraFacing(context, BACK_TELE)) {
+            return BACK_TELE;
+        } else if (CameraUtils.hasCameraFacing(context, BACK_WIDE)) {
+            return BACK_WIDE;
+        }else if (CameraUtils.hasCameraFacing(context, FRONT)) {
             return FRONT;
         } else {
             // The controller will throw a CameraException.
             // This device has no cameras.
-            return BACK;
+            return BACK_NORMAL;
         }
     }
 

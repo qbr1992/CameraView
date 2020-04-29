@@ -327,15 +327,20 @@ public abstract class MediaEncoder {
     protected void onStopped() {
         LogUtil.e(mName, "is being released. Notifying controller and releasing codecs.");
         // TODO should we call notifyStopped after this method ends?
-        mMediaCodec.stop();
-        mMediaCodec.release();
-        mMediaCodec = null;
-        mOutputBufferPool.clear();
-        mOutputBufferPool = null;
+        if (mMediaCodec != null) {
+            mMediaCodec.stop();
+            mMediaCodec.release();
+            mMediaCodec = null;
+        }
+        if (mOutputBufferPool != null) {
+            mOutputBufferPool.clear();
+            mOutputBufferPool = null;
+        }
         mBuffers = null;
         setState(STATE_STOPPED);
-        mWorker.destroy();
-        mController.notifyStopped();
+        if (mWorker != null) mWorker.destroy();
+        Log.e(TAG, "onPrepare onStopped: mController == " + mController);
+        if (mController != null) mController.notifyStopped();
         recordState = false;
     }
 
@@ -454,6 +459,8 @@ public abstract class MediaEncoder {
                     buffer.isVideo = mName.equals(NAME_VIDEO);
                     buffer.data = encodedData;
                     onWriteOutput(mOutputBufferPool, buffer, true);
+//                    byte[] bytes = new byte[buffer.data.remaining()];
+//                    buffer.data.get(bytes);
                 } else if (mController.isStarted() && mBufferInfo.size != 0) {
 
                     // adjust the ByteBuffer values to match BufferInfo (not needed?)
@@ -505,6 +512,7 @@ public abstract class MediaEncoder {
     @SuppressWarnings("WeakerAccess")
     public final void notifyFirstFrameMillis(long firstFrameMillis) {
         mStartTimeUs = firstFrameMillis;
+        Log.e(TAG, "drainOutput notifyFirstFrameMillis: mStartTimeUs === " + mStartTimeUs);
     }
 
     /**
