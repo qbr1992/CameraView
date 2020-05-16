@@ -10,8 +10,8 @@ import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.VideoResult;
 import com.sabine.cameraview.controls.Audio;
 import com.sabine.cameraview.controls.VideoCodec;
+import com.sabine.cameraview.internal.CamcorderProfiles;
 import com.sabine.cameraview.internal.DeviceEncoders;
-import com.sabine.cameraview.internal.utils.CamcorderProfiles;
 import com.sabine.cameraview.size.Size;
 
 /**

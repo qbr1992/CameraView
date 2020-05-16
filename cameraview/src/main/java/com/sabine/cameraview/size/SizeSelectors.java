@@ -1,7 +1,5 @@
 package com.sabine.cameraview.size;
 
-import android.util.Log;
-
 import androidx.annotation.NonNull;
 
 import java.util.ArrayList;

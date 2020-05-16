@@ -5,7 +5,7 @@ import android.os.Build;
 
 import androidx.annotation.RequiresApi;
 
-import com.sabine.cameraview.internal.utils.Pool;
+import com.sabine.cameraview.internal.Pool;
 
 /**
  * A simple {@link Pool(int, Factory)} implementation for output buffers.

@@ -3,8 +3,6 @@ package com.sabine.cameraview.video.encoding;
 import android.graphics.SurfaceTexture;
 import android.opengl.Matrix;
 import android.os.Build;
-import android.os.SystemClock;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -12,13 +10,11 @@ import androidx.annotation.RequiresApi;
 
 import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.filter.Filter;
-import com.sabine.cameraview.internal.egl.EglCore;
-import com.sabine.cameraview.internal.egl.EglViewport;
-import com.sabine.cameraview.internal.egl.EglWindowSurface;
-import com.sabine.cameraview.internal.utils.Pool;
+import com.sabine.cameraview.internal.GlTextureDrawer;
+import com.sabine.cameraview.internal.Pool;
+import com.otaliastudios.opengl.core.EglCore;
+import com.otaliastudios.opengl.surface.EglWindowSurface;
 import com.sabine.cameraview.utils.LogUtil;
-
-import java.util.List;
 
 /**
  * Default implementation for video encoding.
@@ -35,7 +31,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
     private int mTransformRotation;
     private EglCore mEglCore;
     private EglWindowSurface mWindow;
-    private EglViewport mViewport;
+    private GlTextureDrawer mDrawer;
     private Pool<Frame> mFramePool = new Pool<>(Integer.MAX_VALUE, new Pool.Factory<Frame>() {
         @Override
         public Frame create() {
@@ -112,7 +108,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
                 mEglCore = new EglCore(mConfig.eglContext, EglCore.FLAG_RECORDABLE);
                 mWindow = new EglWindowSurface(mEglCore, mSurface, true);
                 mWindow.makeCurrent();
-                mViewport = new EglViewport();
+                mDrawer = new GlTextureDrawer(mConfig.textureId);
             }
         });
     }
@@ -164,7 +160,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
     }
 
     private void onFilter(@NonNull Filter filter) {
-        if (mViewport != null) mViewport.setFilter(filter, filterLevel);
+        mDrawer.setFilter(filter);
     }
 
     private void onFrame(@NonNull Frame frame) {
@@ -226,12 +222,13 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
                 "isRecording:", isRecording(),
                 "thread:", Thread.currentThread(),
                 "- gl rendering.");
-        if (mViewport != null) mViewport.drawFrame(frame.timestampUs(), mConfig.textureId, transform);
+        mDrawer.setTextureTransform(transform);
+        mDrawer.draw(frame.timestampUs());
         if (mConfig.hasOverlay()) {
             mConfig.overlayDrawer.render(frame.timestampUs());
         }
-        if (mWindow != null) mWindow.setPresentationTime(frame.timestampNanos);
-        if (mWindow != null) mWindow.swapBuffers();
+        mWindow.setPresentationTime(frame.timestampNanos);
+        mWindow.swapBuffers();
         mFramePool.recycle(frame);
         LOG.i("onEvent -",
                 "frameNumber:", mFrameNumber,
@@ -249,9 +246,9 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
             mWindow.release();
             mWindow = null;
         }
-        if (mViewport != null) {
-            mViewport.release();
-            mViewport = null;
+        if (mDrawer != null) {
+            mDrawer.release();
+            mDrawer = null;
         }
         if (mEglCore != null) {
             mEglCore.release();

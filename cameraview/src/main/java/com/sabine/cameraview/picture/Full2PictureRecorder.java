@@ -19,8 +19,8 @@ import com.sabine.cameraview.engine.Camera2Engine;
 import com.sabine.cameraview.engine.action.Action;
 import com.sabine.cameraview.engine.action.ActionHolder;
 import com.sabine.cameraview.engine.action.BaseAction;
-import com.sabine.cameraview.internal.utils.ExifHelper;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.ExifHelper;
+import com.sabine.cameraview.internal.WorkerHandler;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;

@@ -1,10 +1,5 @@
 package com.sabine.cameraview.preview;
 
-
-import android.content.Context;
-import android.view.View;
-import android.view.ViewGroup;
-
 import androidx.annotation.NonNull;
 
 import com.sabine.cameraview.filter.Filter;
@@ -16,12 +11,7 @@ import com.sabine.cameraview.filter.Filter;
  * The preview has the responsibility of calling {@link Filter#setSize(int, int)}
  * whenever the preview size changes and as soon as the filter is applied.
  */
-public abstract class FilterCameraPreview<T extends View, Output> extends CameraPreview<T, Output> {
-
-    @SuppressWarnings("WeakerAccess")
-    public FilterCameraPreview(@NonNull Context context, @NonNull ViewGroup parent) {
-        super(context, parent);
-    }
+public interface FilterCameraPreview {
 
     /**
      * Sets a new filter.

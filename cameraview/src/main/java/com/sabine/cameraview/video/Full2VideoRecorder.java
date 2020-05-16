@@ -16,7 +16,7 @@ import com.sabine.cameraview.engine.action.Action;
 import com.sabine.cameraview.engine.action.ActionHolder;
 import com.sabine.cameraview.engine.action.BaseAction;
 import com.sabine.cameraview.engine.action.CompletionCallback;
-import com.sabine.cameraview.internal.utils.CamcorderProfiles;
+import com.sabine.cameraview.internal.CamcorderProfiles;
 import com.sabine.cameraview.size.Size;
 
 /**

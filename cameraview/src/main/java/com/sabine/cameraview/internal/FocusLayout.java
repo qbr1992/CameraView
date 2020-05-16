@@ -8,16 +8,10 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PointF;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
-import android.graphics.RectF;
 import android.os.Handler;
 import android.util.AttributeSet;
-import android.util.Log;
-import android.view.GestureDetector;
 import android.view.MotionEvent;
-import android.view.Surface;
 import android.view.View;
 
 import androidx.annotation.Nullable;
@@ -25,9 +19,6 @@ import androidx.annotation.Nullable;
 import com.sabine.cameraview.CameraOptions;
 import com.sabine.cameraview.CameraView;
 import com.sabine.cameraview.R;
-import com.sabine.cameraview.internal.utils.DensityUtil;
-
-import java.util.List;
 
 public class FocusLayout extends View {
 

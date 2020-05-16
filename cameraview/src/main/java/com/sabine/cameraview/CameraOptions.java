@@ -163,7 +163,7 @@ public abstract class CameraOptions {
     /**
      * Set of supported facing values.
      *
-     * @see Facing#BACK
+     * @see Facing#BACK_NORMAL
      * @see Facing#FRONT
      * @return a collection of supported values.
      */

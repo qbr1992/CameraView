@@ -12,7 +12,6 @@ import com.sabine.cameraview.controls.PictureFormat;
 import com.sabine.cameraview.size.Size;
 
 import java.io.File;
-import java.util.Arrays;
 
 /**
  * Wraps the picture captured by {@link CameraView#takePicture()} or
@@ -172,17 +171,5 @@ public class PictureResult {
      */
     public void toFile(@NonNull File file, @NonNull FileCallback callback) {
         CameraUtils.writeToFile(getData(), file, callback);
-    }
-
-    @Override
-    public String toString() {
-        return "PictureResult{" +
-                "isSnapshot=" + isSnapshot +
-                ", location=" + location +
-                ", rotation=" + rotation +
-                ", size=" + size +
-                ", facing=" + facing +
-                ", format=" + format +
-                '}';
     }
 }

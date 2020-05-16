@@ -167,9 +167,4 @@ public abstract class CameraListener {
 
     }
 
-    @UiThread
-    public void onVideoMuxerChange() {
-
-    }
-
 }

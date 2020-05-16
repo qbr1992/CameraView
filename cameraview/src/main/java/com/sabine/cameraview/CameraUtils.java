@@ -16,8 +16,8 @@ import androidx.exifinterface.media.ExifInterface;
 
 import com.sabine.cameraview.controls.Facing;
 import com.sabine.cameraview.engine.mappers.Camera1Mapper;
-import com.sabine.cameraview.internal.utils.ExifHelper;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.ExifHelper;
+import com.sabine.cameraview.internal.WorkerHandler;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;

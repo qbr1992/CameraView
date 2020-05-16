@@ -22,7 +22,7 @@ public class TextureConfig extends VideoConfig {
     public EGLContext eglContext;
 
     @NonNull
-    public TextureConfig copy() {
+    TextureConfig copy() {
         TextureConfig copy = new TextureConfig();
         copy(copy);
         copy.textureId = this.textureId;
@@ -37,25 +37,5 @@ public class TextureConfig extends VideoConfig {
 
     boolean hasOverlay() {
         return overlayDrawer != null;
-    }
-
-    @Override
-    public String toString() {
-        return "TextureConfig{" +
-                "textureId=" + textureId +
-                ", overlayTarget=" + overlayTarget +
-                ", overlayDrawer=" + overlayDrawer +
-                ", overlayRotation=" + overlayRotation +
-                ", scaleX=" + scaleX +
-                ", scaleY=" + scaleY +
-                ", eglContext=" + eglContext +
-                ", width=" + width +
-                ", height=" + height +
-                ", bitRate=" + bitRate +
-                ", frameRate=" + frameRate +
-                ", rotation=" + rotation +
-                ", mimeType='" + mimeType + '\'' +
-                ", encoder='" + encoder + '\'' +
-                '}';
     }
 }

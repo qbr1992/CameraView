@@ -36,13 +36,12 @@ import com.sabine.cameraview.engine.orchestrator.CameraStateOrchestrator;
 import com.sabine.cameraview.frame.Frame;
 import com.sabine.cameraview.frame.FrameManager;
 import com.sabine.cameraview.gesture.Gesture;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.WorkerHandler;
 import com.sabine.cameraview.metering.MeteringRegions;
 import com.sabine.cameraview.overlay.Overlay;
 import com.sabine.cameraview.picture.PictureRecorder;
 import com.sabine.cameraview.preview.CameraPreview;
 import com.sabine.cameraview.size.Size;
-import com.sabine.cameraview.size.SizeSelector;
 import com.sabine.cameraview.video.VideoRecorder;
 
 import java.io.File;
@@ -127,7 +126,6 @@ public abstract class CameraEngine implements
         void dispatchOnVideoRecordingStart();
         void dispatchOnVideoEncodeStart(int bitrate);
         void dispatchOnVideoRecordingEnd();
-        void dispatchOnMuxerChange();
     }
 
     protected static final String TAG = CameraEngine.class.getSimpleName();
@@ -342,14 +340,14 @@ public abstract class CameraEngine implements
 
     @SuppressWarnings("WeakerAccess")
     public void restart() {
-        LOG.e("RESTART:", "scheduled. State:", getState());
+        LOG.i("RESTART:", "scheduled. State:", getState());
         stop(false);
         start();
     }
 
     @NonNull
     public Task<Void> start() {
-        LOG.e("START:", "scheduled. State:", getState());
+        LOG.i("START:", "scheduled. State:", getState());
         Task<Void> engine = startEngine();
         startBind();
         startPreview();
@@ -367,7 +365,7 @@ public abstract class CameraEngine implements
     @SuppressWarnings({"WeakerAccess", "UnusedReturnValue"})
     @NonNull
     protected Task<Void> restartBind() {
-        LOG.e("RESTART BIND:", "scheduled. State:", getState());
+        LOG.i("RESTART BIND:", "scheduled. State:", getState());
         stopPreview(false);
         stopBind(false);
         startBind();
@@ -583,7 +581,7 @@ public abstract class CameraEngine implements
     @SuppressWarnings("ConstantConditions")
     @Override
     public final void onSurfaceAvailable() {
-        LOG.e("onSurfaceAvailable:", "Size is", getPreview().getSurfaceSize());
+        LOG.i("onSurfaceAvailable:", "Size is", getPreview().getSurfaceSize());
         startBind();
         startPreview();
     }
@@ -700,12 +698,12 @@ public abstract class CameraEngine implements
     public abstract void setPictureFormat(@NonNull PictureFormat pictureFormat);
     @NonNull public abstract PictureFormat getPictureFormat();
 
+    public abstract void setPreviewFrameRateExact(boolean previewFrameRateExact);
+    public abstract boolean getPreviewFrameRateExact();
     public abstract void setPreviewFrameRate(float previewFrameRate);
     public abstract boolean supportHighSpeed();
     public abstract boolean supportDuoCamera();
     public abstract float getPreviewFrameRate();
-    public abstract float getMaxPreviewFrameRate();
-    public abstract float getMinPreviewFrameRate();
 
     public abstract void setHasFrameProcessors(boolean hasFrameProcessors);
     public abstract boolean hasFrameProcessors();

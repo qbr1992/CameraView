@@ -61,7 +61,7 @@ public enum Facing implements Control {
         this.value = value;
     }
 
-    public int value() {
+    int value() {
         return value;
     }
 

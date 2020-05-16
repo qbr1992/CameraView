@@ -5,10 +5,9 @@ import android.hardware.Camera;
 import androidx.annotation.NonNull;
 import androidx.exifinterface.media.ExifInterface;
 
-
 import com.sabine.cameraview.PictureResult;
 import com.sabine.cameraview.engine.Camera1Engine;
-import com.sabine.cameraview.internal.utils.ExifHelper;
+import com.sabine.cameraview.internal.ExifHelper;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

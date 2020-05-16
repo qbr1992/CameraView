@@ -15,8 +15,6 @@ import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.utils.LogUtil;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Stack;
 
 /**
  * Base class for video encoding.
@@ -101,7 +99,7 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
             format.setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel31);
         }
 
-        Log.e(TAG, "onPrepare: " + format);
+        LogUtil.e(TAG, "onPrepare: " + format);
         try {
             if (mConfig.encoder != null) {
                 mMediaCodec = MediaCodec.createByCodecName(mConfig.encoder);
@@ -113,8 +111,9 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
             mMediaCodec.start();
             if (onPrepareListener != null) onPrepareListener.onPrepareSuccess();
         } catch (Exception e) {
-            Log.e(TAG, "onPrepare: " + e.toString());
+            LogUtil.e(TAG, "onPrepare: " + e.toString());
             if (e instanceof IllegalArgumentException) { // 这个错误是视频码率参数不支持导致的，需要降码率
+                mMediaCodec.release();
                 mMediaCodec = null;
                 mVideoRealBitrate -= 10 * 1000 * 1000;
                 if (mVideoRealBitrate > 0) onPrepare(onPrepareListener);

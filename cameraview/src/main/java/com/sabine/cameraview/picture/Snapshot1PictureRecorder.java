@@ -9,9 +9,9 @@ import androidx.annotation.NonNull;
 import com.sabine.cameraview.PictureResult;
 import com.sabine.cameraview.engine.Camera1Engine;
 import com.sabine.cameraview.engine.offset.Reference;
-import com.sabine.cameraview.internal.utils.CropHelper;
-import com.sabine.cameraview.internal.utils.RotationHelper;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.CropHelper;
+import com.sabine.cameraview.internal.RotationHelper;
+import com.sabine.cameraview.internal.WorkerHandler;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
 

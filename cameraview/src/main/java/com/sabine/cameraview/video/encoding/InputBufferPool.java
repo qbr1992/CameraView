@@ -1,6 +1,6 @@
 package com.sabine.cameraview.video.encoding;
 
-import com.sabine.cameraview.internal.utils.Pool;
+import com.sabine.cameraview.internal.Pool;
 
 /**
  * A simple {@link Pool(int, Factory)} implementation for input buffers.

@@ -70,6 +70,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @SuppressWarnings("WeakerAccess") protected boolean mPictureMetering;
     @SuppressWarnings("WeakerAccess") protected boolean mPictureSnapshotMetering;
     @SuppressWarnings("WeakerAccess") protected int mPreviewFrameRate;
+    @SuppressWarnings("WeakerAccess") private boolean mPreviewFrameRateExact;
 
     private FrameManager mFrameManager;
     private final Angles mAngles = new Angles();
@@ -92,21 +93,29 @@ public abstract class CameraBaseEngine extends CameraEngine {
     boolean supportDuoCamera = false;
 
     // Ops used for testing.
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mZoomTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mZoomTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mExposureCorrectionTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mExposureCorrectionTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mFlashTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mFlashTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mWhiteBalanceTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mWhiteBalanceTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mHdrTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mHdrTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mLocationTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mLocationTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mPlaySoundsTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mPlaySoundsTask
             = Tasks.forResult(null);
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED) Task<Void> mPreviewFrameRateTask
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    Task<Void> mPreviewFrameRateTask
             = Tasks.forResult(null);
 
     @SuppressWarnings("WeakerAccess")
@@ -432,18 +441,18 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
+    public final void setPreviewFrameRateExact(boolean previewFrameRateExact) {
+        mPreviewFrameRateExact = previewFrameRateExact;
+    }
+
+    @Override
+    public final boolean getPreviewFrameRateExact() {
+        return mPreviewFrameRateExact;
+    }
+
+    @Override
     public final float getPreviewFrameRate() {
         return mPreviewFrameRate;
-    }
-
-    public final float getMaxPreviewFrameRate() {
-        if (mCameraOptions == null) return 0;
-        return mCameraOptions.getPreviewFrameRateMaxValue();
-    }
-
-    public final float getMinPreviewFrameRate() {
-        if (mCameraOptions == null) return 0;
-        return mCameraOptions.getPreviewFrameRateMinValue();
     }
 
     @Override
@@ -667,11 +676,6 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @Override
     public void onVideoRecordingEnd() {
         getCallback().dispatchOnVideoRecordingEnd();
-    }
-
-    @Override
-    public void onVideoMuxerChange() {
-        getCallback().dispatchOnMuxerChange();
     }
 
     @EngineThread

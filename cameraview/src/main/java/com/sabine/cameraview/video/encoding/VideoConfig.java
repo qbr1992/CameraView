@@ -24,17 +24,4 @@ public class VideoConfig {
         output.mimeType = this.mimeType;
         output.encoder = this.encoder;
     }
-
-    @Override
-    public String toString() {
-        return "VideoConfig{" +
-                "width=" + width +
-                ", height=" + height +
-                ", bitRate=" + bitRate +
-                ", frameRate=" + frameRate +
-                ", rotation=" + rotation +
-                ", mimeType='" + mimeType + '\'' +
-                ", encoder='" + encoder + '\'' +
-                '}';
-    }
 }

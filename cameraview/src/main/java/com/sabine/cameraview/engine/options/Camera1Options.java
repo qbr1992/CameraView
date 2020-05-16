@@ -13,7 +13,7 @@ import com.sabine.cameraview.controls.Hdr;
 import com.sabine.cameraview.controls.PictureFormat;
 import com.sabine.cameraview.controls.WhiteBalance;
 import com.sabine.cameraview.engine.mappers.Camera1Mapper;
-import com.sabine.cameraview.internal.utils.CamcorderProfiles;
+import com.sabine.cameraview.internal.CamcorderProfiles;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
 

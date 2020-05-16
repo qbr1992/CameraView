@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
 
 import com.sabine.cameraview.VideoResult;
 import com.sabine.cameraview.engine.Camera1Engine;
-import com.sabine.cameraview.internal.utils.CamcorderProfiles;
+import com.sabine.cameraview.internal.CamcorderProfiles;
 import com.sabine.cameraview.size.Size;
 
 /**

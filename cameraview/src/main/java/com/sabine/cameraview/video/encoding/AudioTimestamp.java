@@ -1,7 +1,5 @@
 package com.sabine.cameraview.video.encoding;
 
-import android.util.Log;
-
 import com.sabine.cameraview.utils.LogUtil;
 
 /**

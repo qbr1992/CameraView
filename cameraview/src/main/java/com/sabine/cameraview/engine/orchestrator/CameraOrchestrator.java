@@ -8,7 +8,7 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.android.gms.tasks.Tasks;
 import com.sabine.cameraview.CameraLogger;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.WorkerHandler;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

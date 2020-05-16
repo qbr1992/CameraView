@@ -15,13 +15,8 @@ import android.content.pm.PackageManager;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Matrix;
-import android.graphics.Paint;
 import android.graphics.PointF;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.location.Location;
@@ -30,9 +25,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.MotionEvent;
-import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -79,8 +72,8 @@ import com.sabine.cameraview.gesture.TapGestureFinder;
 import com.sabine.cameraview.internal.CountDownLayout;
 import com.sabine.cameraview.internal.FocusLayout;
 import com.sabine.cameraview.internal.GridLinesLayout;
-import com.sabine.cameraview.internal.utils.CropHelper;
-import com.sabine.cameraview.internal.utils.OrientationHelper;
+import com.sabine.cameraview.internal.CropHelper;
+import com.sabine.cameraview.internal.OrientationHelper;
 import com.sabine.cameraview.markers.AutoFocusMarker;
 import com.sabine.cameraview.markers.AutoFocusTrigger;
 import com.sabine.cameraview.markers.MarkerLayout;
@@ -97,7 +90,6 @@ import com.sabine.cameraview.size.Size;
 import com.sabine.cameraview.size.SizeSelector;
 import com.sabine.cameraview.size.SizeSelectorParser;
 import com.sabine.cameraview.size.SizeSelectors;
-import com.sabine.cameraview.utils.LogUtil;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -226,6 +218,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         int videoBitRate = a.getInteger(R.styleable.CameraView_cameraVideoBitRate, 0);
         int audioBitRate = a.getInteger(R.styleable.CameraView_cameraAudioBitRate, 0);
         float videoFrameRate = a.getFloat(R.styleable.CameraView_cameraPreviewFrameRate, 0);
+        boolean videoFrameRateExact = a.getBoolean(R.styleable.CameraView_cameraPreviewFrameRateExact, false);
         long autoFocusResetDelay = (long) a.getInteger(
                 R.styleable.CameraView_cameraAutoFocusResetDelay,
                 (int) DEFAULT_AUTOFOCUS_RESET_DELAY_MILLIS);
@@ -301,6 +294,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         setVideoCodec(controls.getVideoCodec());
         setVideoBitRate(videoBitRate);
         setAutoFocusResetDelay(autoFocusResetDelay);
+        setPreviewFrameRateExact(videoFrameRateExact);
         setPreviewFrameRate(videoFrameRate);
         setSnapshotMaxWidth(snapshotMaxWidth);
         setSnapshotMaxHeight(snapshotMaxHeight);
@@ -776,6 +770,14 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     //region Lifecycle APIs
 
     /**
+     * Sets permissions flag if you want enable auto check permissions or disable it.
+     * @param requestPermissions - true: auto check permissions enabled, false: auto check permissions disabled.
+     */
+    public void setRequestPermissions(boolean requestPermissions) {
+        mRequestPermissions = requestPermissions;
+    }
+
+    /**
      * Returns whether the camera engine has started.
      * @return whether the camera has started
      */
@@ -793,12 +795,26 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * Sets the lifecycle owner for this view. This means you don't need
      * to call {@link #open()}, {@link #close()} or {@link #destroy()} at all.
      *
+     * If you want that lifecycle stopped controlling the state of the camera,
+     * pass null in this method.
+     *
      * @param owner the owner activity or fragment
      */
-    public void setLifecycleOwner(@NonNull LifecycleOwner owner) {
-        if (mLifecycle != null) mLifecycle.removeObserver(this);
-        mLifecycle = owner.getLifecycle();
-        mLifecycle.addObserver(this);
+    public void setLifecycleOwner(@Nullable LifecycleOwner owner) {
+        if (owner == null) {
+            clearLifecycleObserver();
+        } else {
+            clearLifecycleObserver();
+            mLifecycle = owner.getLifecycle();
+            mLifecycle.addObserver(this);
+        }
+    }
+
+    private void clearLifecycleObserver() {
+        if (mLifecycle != null) {
+            mLifecycle.removeObserver(this);
+            mLifecycle = null;
+        }
     }
 
     /**
@@ -1048,6 +1064,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         setVideoBitRate(oldEngine.getVideoBitRate());
         setAutoFocusResetDelay(oldEngine.getAutoFocusResetDelay());
         setPreviewFrameRate(oldEngine.getPreviewFrameRate());
+        setPreviewFrameRateExact(oldEngine.getPreviewFrameRateExact());
         setSnapshotMaxWidth(oldEngine.getSnapshotMaxWidth());
         setSnapshotMaxHeight(oldEngine.getSnapshotMaxHeight());
         setFrameProcessingMaxWidth(oldEngine.getFrameProcessingMaxWidth());
@@ -1616,6 +1633,38 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     /**
+     * A flag to control the behavior when calling {@link #setPreviewFrameRate(float)}.
+     *
+     * If the value is set to true, {@link #setPreviewFrameRate(float)} will choose the preview
+     * frame range as close to the desired new frame rate as possible. Which mean it may choose a
+     * narrow range around the desired frame rate. Note: This option will give you as exact fps as
+     * you want but the sensor will have less freedom when adapting the exposure to the environment,
+     * which may lead to dark preview.
+     *
+     * If the value is set to false, {@link #setPreviewFrameRate(float)} will choose as broad range
+     * as it can.
+     *
+     * @param videoFrameRateExact whether want a more exact preview frame range
+     *
+     * @see #setPreviewFrameRate(float)
+     */
+    public void setPreviewFrameRateExact(boolean videoFrameRateExact) {
+        mCameraEngine.setPreviewFrameRateExact(videoFrameRateExact);
+    }
+
+    /**
+     * Returns whether we want to set preview fps as exact as we set through
+     * {@link #setPreviewFrameRate(float)}.
+     *
+     * @see #setPreviewFrameRateExact(boolean)
+     * @see #setPreviewFrameRate(float)
+     * @return current option
+     */
+    public boolean getPreviewFrameRateExact() {
+        return mCameraEngine.getPreviewFrameRateExact();
+    }
+
+    /**
      * Sets the preview frame rate in frames per second.
      * This rate will be used, for example, by the frame processor and in video
      * snapshot taken through {@link #takeVideo(File)}.
@@ -1639,13 +1688,6 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         return mCameraEngine.getPreviewFrameRate();
     }
 
-    public float getPreviewMaxFrameRate() {
-        return mCameraEngine.getMaxPreviewFrameRate();
-    }
-
-    public float getPreviewMinFrameRate() {
-        return mCameraEngine.getMinPreviewFrameRate();
-    }
 
     /**
      * Sets the bit rate in bits per second for audio capturing.
@@ -2360,19 +2402,6 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                 public void run() {
                     for (CameraListener listener : mListeners) {
                         listener.onVideoRecordingEnd();
-                    }
-                }
-            });
-        }
-
-        @Override
-        public void dispatchOnMuxerChange() {
-            LOG.i("dispatchOnVideoRecordingEnd");
-            mUiHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    for (CameraListener listener : mListeners) {
-                        listener.onVideoMuxerChange();
                     }
                 }
             });

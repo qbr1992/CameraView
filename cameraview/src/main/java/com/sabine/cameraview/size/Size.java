@@ -1,7 +1,6 @@
 package com.sabine.cameraview.size;
 
 import android.media.CamcorderProfile;
-import android.util.Range;
 
 import androidx.annotation.NonNull;
 

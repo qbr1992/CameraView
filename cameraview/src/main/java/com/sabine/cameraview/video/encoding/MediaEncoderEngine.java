@@ -5,14 +5,13 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.os.Build;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import com.sabine.cameraview.CameraLogger;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.WorkerHandler;
 import com.sabine.cameraview.utils.LogUtil;
 import com.sabinetek.mp4v2utils.Mp4v2Helper;
 
@@ -94,8 +93,6 @@ public class MediaEncoderEngine {
          */
         @EncoderThread
         void onEncodingEnd(int reason, @Nullable Exception e);
-
-        void onMuxerChange();
     }
 
     private final static String TAG = MediaEncoderEngine.class.getSimpleName();

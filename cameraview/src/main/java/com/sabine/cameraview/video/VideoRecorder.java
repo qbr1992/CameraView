@@ -9,8 +9,6 @@ import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.VideoResult;
 import com.sabine.cameraview.utils.LogUtil;
 
-import java.io.File;
-
 /**
  * Interface for video recording.
  * Don't call start if already started. Don't call stop if already stopped.
@@ -44,8 +42,6 @@ public abstract class VideoRecorder {
          * and soon {@link #onVideoResult(VideoResult.Stub, Exception)} will be called.
          */
         void onVideoRecordingEnd();
-
-        void onVideoMuxerChange();
     }
 
     private final static int STATE_IDLE = 0;
@@ -182,15 +178,6 @@ public abstract class VideoRecorder {
         LOG.i("dispatchVideoRecordingEnd:", "About to dispatch.");
         if (mListener != null) {
             mListener.onVideoRecordingEnd();
-        }
-    }
-
-    @SuppressWarnings("WeakerAccess")
-    @CallSuper
-    protected void dispatchVideoMuxerChange() {
-        LOG.i("dispatchVideoRecordingEnd:", "About to dispatch.");
-        if (mListener != null) {
-            mListener.onVideoMuxerChange();
         }
     }
 

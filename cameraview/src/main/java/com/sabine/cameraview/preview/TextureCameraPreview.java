@@ -3,7 +3,6 @@ package com.sabine.cameraview.preview;
 import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.TextureView;
 import android.view.View;
@@ -66,7 +65,7 @@ public class TextureCameraPreview extends CameraPreview<TextureView, SurfaceText
 
     @NonNull
     @Override
-    View getRootView() {
+    public View getRootView() {
         return mRootView;
     }
 

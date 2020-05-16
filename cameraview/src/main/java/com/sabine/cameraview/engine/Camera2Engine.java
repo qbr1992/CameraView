@@ -64,11 +64,12 @@ import com.sabine.cameraview.frame.Frame;
 import com.sabine.cameraview.frame.FrameManager;
 import com.sabine.cameraview.frame.ImageFrameManager;
 import com.sabine.cameraview.gesture.Gesture;
-import com.sabine.cameraview.internal.utils.CropHelper;
+import com.sabine.cameraview.internal.CropHelper;
 import com.sabine.cameraview.metering.MeteringRegions;
 import com.sabine.cameraview.picture.Full2PictureRecorder;
 import com.sabine.cameraview.picture.Snapshot2PictureRecorder;
 import com.sabine.cameraview.preview.GlCameraPreview;
+import com.sabine.cameraview.preview.RendererCameraPreview;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
 import com.sabine.cameraview.utils.LogUtil;
@@ -76,9 +77,10 @@ import com.sabine.cameraview.video.Full2VideoRecorder;
 import com.sabine.cameraview.video.SnapshotVideoRecorder;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
-import java.util.Stack;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -841,17 +843,16 @@ public class Camera2Engine extends CameraBaseEngine implements
             action.start(this);
         } else {
             LOG.i("onTakePictureSnapshot:", "doMetering is false. Performing.");
-            if (!(mPreview instanceof GlCameraPreview)) {
+            if (!(mPreview instanceof RendererCameraPreview)) {
                 throw new RuntimeException("takePictureSnapshot with Camera2 is only " +
                         "supported with Preview.GL_SURFACE");
             }
             // stub.size is not the real size: it will be cropped to the given ratio
             // stub.rotation will be set to 0 - we rotate the texture instead.
             stub.size = getUncroppedSnapshotSize(Reference.OUTPUT);
-            stub.rotation = getAngles().offset(Reference.SENSOR, Reference.OUTPUT,
-                    Axis.RELATIVE_TO_SENSOR);
+            stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
             mPictureRecorder = new Snapshot2PictureRecorder(stub, this,
-                    (GlCameraPreview) mPreview, outputRatio);
+                    (RendererCameraPreview) mPreview, outputRatio);
             mPictureRecorder.take();
         }
     }
@@ -976,28 +977,11 @@ public class Camera2Engine extends CameraBaseEngine implements
         }
         Rect outputCrop = CropHelper.computeCrop(outputSize, outputRatio);
         outputSize = new Size(outputCrop.width(), outputCrop.height());
-//        stub.size = outputSize;
-        // Vertical:               0   (270-0-0)
-        // Left (unlocked):        270 (270-90-270)
-        // Right (unlocked):       90  (270-270-90)
-        // Upside down (unlocked): 180 (270-180-180)
-        // Left (locked):          270 (270-0-270)
-        // Right (locked):         90  (270-0-90)
-        // Upside down (locked):   180 (270-0-180)
-        // Unlike Camera1, the correct formula seems to be deviceOrientation,
-        // which means offset(Reference.BASE, Reference.OUTPUT, Axis.ABSOLUTE).
-        stub.rotation = getAngles().offset(Reference.BASE, Reference.OUTPUT, Axis.ABSOLUTE);
-        if (stub.rotation == 90 || stub.rotation == 270) {
-            stub.size = new Size(stub.size.getHeight(), stub.size.getWidth());
-        }
+        stub.size = outputSize;
+        stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
         stub.videoFrameRate = Math.round(mPreviewFrameRate);
-        LOG.e("onTakeVideoSnapshot", "rotation:", stub.rotation, "size:", stub.size);
-
-        // Start.
-        // The overlay rotation should alway be VIEW-OUTPUT, just liek Camera1Engine.
-        int overlayRotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
-        mVideoRecorder = new SnapshotVideoRecorder(this, glPreview, getOverlay(),
-                overlayRotation);
+        LOG.i("onTakeVideoSnapshot", "rotation:", stub.rotation, "size:", stub.size);
+        mVideoRecorder = new SnapshotVideoRecorder(this, glPreview, getOverlay());
         mVideoRecorder.start(stub);
     }
 
@@ -1078,12 +1062,6 @@ public class Camera2Engine extends CameraBaseEngine implements
         applyZoom(builder, 0F);
         applyExposureCorrection(builder, 0F);
         applyPreviewFrameRate(builder, mPreviewFrameRate);
-
-        if (mCameraOptions.isStabSupported()) {
-            builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON);
-        } else {
-            LogUtil.e(TAG, "applyAllParameters: 不支持防抖");
-        }
 
         if (oldBuilder != null) {
             // We might be in a metering operation, or the old builder might have some special

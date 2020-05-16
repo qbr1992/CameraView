@@ -192,19 +192,4 @@ public class Frame {
         ensureHasContent();
         return mFormat;
     }
-
-    @Override
-    public String toString() {
-        return "Frame{" +
-                "mManager=" + mManager +
-                ", mDataClass=" + mDataClass +
-                ", mData=" + mData +
-                ", mTime=" + mTime +
-                ", mLastTime=" + mLastTime +
-                ", mUserRotation=" + mUserRotation +
-                ", mViewRotation=" + mViewRotation +
-                ", mSize=" + mSize +
-                ", mFormat=" + mFormat +
-                '}';
-    }
 }

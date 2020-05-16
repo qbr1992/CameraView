@@ -7,7 +7,6 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.view.Surface;
 
-import com.sabine.cameraview.internal.egl.EglViewport;
 import com.sabine.cameraview.preview.RendererThread;
 
 
@@ -85,7 +84,7 @@ import com.sabine.cameraview.preview.RendererThread;
  *
  * This makes no sense, since overlaySurfaceTexture.updateTexImage() is setting it to
  * overlayTextureId anyway, but it fixes the issue. Specifically, after any draw operation with
- * {@link EglViewport}, the bound texture is reset to 0 so this must be undone here. We offer:
+ * {@link GlTextureDrawer}, the bound texture is reset to 0 so this must be undone here. We offer:
  *
  * - {@link #beforeOverlayUpdateTexImage()} to be called before the
  *   {@link SurfaceTexture#updateTexImage()} call
@@ -93,7 +92,7 @@ import com.sabine.cameraview.preview.RendererThread;
  *
  * Since updating and rendering can happen on different threads with a shared EGL context,
  * in case they do, the {@link #beforeOverlayUpdateTexImage()}, the actual updateTexImage() and
- * finally the {@link EglViewport} drawing operations should be synchronized with a lock.
+ * finally the {@link GlTextureDrawer} drawing operations should be synchronized with a lock.
  *
  * REFERENCES
  * https://github.com/natario1/CameraView/issues/514

@@ -1,11 +1,12 @@
 package com.sabine.cameraview.filters;
 
 import android.opengl.GLES20;
+
 import androidx.annotation.NonNull;
 
 import com.sabine.cameraview.filter.BaseFilter;
 import com.sabine.cameraview.filter.OneParameterFilter;
-import com.sabine.cameraview.internal.GlUtils;
+import com.otaliastudios.opengl.core.Egloo;
 
 /**
  * Adjusts color temperature.
@@ -83,7 +84,7 @@ public class TemperatureFilter extends BaseFilter implements OneParameterFilter 
     public void onCreate(int programHandle) {
         super.onCreate(programHandle);
         scaleLocation = GLES20.glGetUniformLocation(programHandle, "scale");
-        GlUtils.checkLocation(scaleLocation, "scale");
+        Egloo.checkGlProgramLocation(scaleLocation, "scale");
     }
 
     @Override
@@ -96,6 +97,6 @@ public class TemperatureFilter extends BaseFilter implements OneParameterFilter 
     protected void onPreDraw(long timestampUs, @NonNull float[] transformMatrix) {
         super.onPreDraw(timestampUs, transformMatrix);
         GLES20.glUniform1f(scaleLocation, scale);
-        GlUtils.checkError("glUniform1f");
+        Egloo.checkGlError("glUniform1f");
     }
 }

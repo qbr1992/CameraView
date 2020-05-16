@@ -12,7 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import com.sabine.cameraview.CameraLogger;
-import com.sabine.cameraview.internal.utils.WorkerHandler;
+import com.sabine.cameraview.internal.WorkerHandler;
 import com.sabine.cameraview.utils.LogUtil;
 
 import java.nio.ByteBuffer;
@@ -63,7 +63,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * MAX LENGTH CONSTRAINT
  *
- * For max length constraint, it will be checked automatically during {@link #drainOutput(boolean)}
+ * For max length constraint, it will be checked automatically during {@link #drainOutput(boolean)},
+ * OR subclasses can provide an hint to this encoder using {@link #notifyMaxLengthReached()}.
  * In this second case, we can request a stop at reading time, so we avoid useless readings
  * in certain setups (where drain is called a lot after reading).
  *
