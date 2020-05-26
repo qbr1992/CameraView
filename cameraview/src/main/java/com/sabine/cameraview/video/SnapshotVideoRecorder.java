@@ -13,6 +13,7 @@ import com.sabine.cameraview.VideoResult;
 import com.sabine.cameraview.controls.Audio;
 import com.sabine.cameraview.engine.CameraEngine;
 import com.sabine.cameraview.filter.Filter;
+import com.sabine.cameraview.filter.MultiFilter;
 import com.sabine.cameraview.internal.DeviceEncoders;
 import com.sabine.cameraview.overlay.Overlay;
 import com.sabine.cameraview.overlay.OverlayDrawer;
@@ -234,7 +235,15 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
 
             // Adjustment
 //            mResult.rotation = 0; // We will rotate the result instead.
-            mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
+//            mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
+            // 解决MultiFilter时，录制视频拉伸问题
+            if (mCurrentFilter instanceof MultiFilter) {
+                for (Filter filter: ((MultiFilter) mCurrentFilter).getFilters()) {
+                    filter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
+                }
+            } else {
+                mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
+            }
 
             // Engine
             synchronized (mEncoderEngineLock) {

@@ -9,6 +9,8 @@ import androidx.annotation.NonNull;
 
 import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.filter.Filter;
+import com.sabine.cameraview.filter.MultiFilter;
+import com.sabine.cameraview.filter.MultiParameterFilter;
 import com.sabine.cameraview.filter.NoFilter;
 import com.sabine.cameraview.filter.OneParameterFilter;
 import com.sabine.cameraview.filter.TwoParameterFilter;
@@ -79,7 +81,37 @@ public class EglViewport {
         // we don't need to wait for a new draw call (which might not even happen).
         mPendingFilter = filter;
         if (mPendingFilter instanceof OneParameterFilter) {
-            ((OneParameterFilter) mPendingFilter).setParameter1(filterLevel);
+//            ((OneParameterFilter) mPendingFilter).setParameter1(filterLevel);
+            // 录制的时候会调用，会重新create，需重新设置参数
+            if (mPendingFilter instanceof MultiFilter) {
+                for (Filter eachFilter: ((MultiFilter) mPendingFilter).getFilters()) {
+                    if (eachFilter instanceof TwoParameterFilter) {
+                        float parameter1 = ((TwoParameterFilter) eachFilter).getParameter1();
+                        float parameter2 = ((TwoParameterFilter) eachFilter).getParameter2();
+                        if (parameter1!=0 || parameter2!=0) {
+                            ((TwoParameterFilter) eachFilter).setParameter1(parameter1);
+                            ((TwoParameterFilter) eachFilter).setParameter2(parameter2);
+                        } else {
+                            ((TwoParameterFilter) eachFilter).setParameter1(filterLevel);
+                            ((TwoParameterFilter) eachFilter).setParameter2(filterLevel);
+                        }
+                    } else if (eachFilter instanceof OneParameterFilter) {
+                        float parameter1 = ((OneParameterFilter) eachFilter).getParameter1();
+                        if (parameter1 != 0) {
+                            ((OneParameterFilter) eachFilter).setParameter1(parameter1);
+                        } else {
+                            ((OneParameterFilter) eachFilter).setParameter1(filterLevel);
+                        }
+                    } else if (eachFilter instanceof MultiParameterFilter) {
+                        float[] parameterMulti = ((MultiParameterFilter) eachFilter).getParameterMulti();
+                        if (parameterMulti != null) {
+                            ((MultiParameterFilter) eachFilter).setParameterMulti(parameterMulti);
+                        }
+                    }
+                }
+            } else {
+                ((OneParameterFilter) mPendingFilter).setParameter1(filterLevel);
+            }
         }
     }
 

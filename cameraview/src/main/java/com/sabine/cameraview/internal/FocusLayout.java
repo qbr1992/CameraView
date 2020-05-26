@@ -8,6 +8,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PointF;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.util.AttributeSet;
@@ -19,6 +21,8 @@ import androidx.annotation.Nullable;
 import com.sabine.cameraview.CameraOptions;
 import com.sabine.cameraview.CameraView;
 import com.sabine.cameraview.R;
+import com.sabine.cameraview.SensorController;
+import com.sabine.cameraview.engine.Camera2Engine;
 
 public class FocusLayout extends View {
 
@@ -51,8 +55,10 @@ public class FocusLayout extends View {
     private float exposureBmpLeftPoint, exposureBmpRightPoint, exposureBmpTopPoint, exposureBmpBottomPoint;
     private float currX, currY;// 当前X Y 点
     private Paint focusProgressPaint, exposureLinePaint, exposureBpmPaint;
+    private float focusBmpLeftPoint, focusBmpRightPoint, focusBmpTopPoint, focusBmpBottomPoint;     // 焦点框坐标
     private Bitmap exposureBmp;// thumb
     private boolean isClear = true;// 是否清空view
+    private boolean isAutoExploreFocus = true;  // 是否自动曝光/聚焦
     private int exposureOffset;// 左右间隔
     private boolean isShowExposure;// 是否显示曝光调节
     private boolean isMoveOccurs = false;
@@ -206,9 +212,19 @@ public class FocusLayout extends View {
         float bitmap_r = (left+right) / 2 + radius;
         float bitmap_t = (top+bottom) / 2 - radius;
         float bitmap_b = (top+bottom) / 2 + radius;
-
+        focusBmpLeftPoint = bitmap_l;focusBmpRightPoint = bitmap_r;focusBmpTopPoint = bitmap_t;focusBmpBottomPoint = bitmap_b;
+        // 锁定时，设置焦点框红色
+        if (!isAutoExploreFocus) {
+            focusProgressPaint.setColorFilter(new PorterDuffColorFilter(Color.RED, PorterDuff.Mode.SRC_IN));
+        // 取消锁定时，恢复正常
+        } else {
+            focusProgressPaint.setColorFilter(null);
+        }
         canvas.drawBitmap(bitmap, null, new Rect((int) bitmap_l, (int) bitmap_t, (int) bitmap_r, (int) bitmap_b), focusProgressPaint);
-
+        // 若不自动曝光对焦，则取消绘制滑块
+        if (!isAutoExploreFocus) {
+            return;
+        }
         // thumb 图片
         exposureBmp = BitmapFactory.decodeResource(getResources(), R.drawable.video_btn_exposure);
         // Track 的长度
@@ -275,6 +291,23 @@ public class FocusLayout extends View {
         switch (action) {
             // 按下
             case MotionEvent.ACTION_DOWN: //0
+                // 显示时再次down，则取消自动曝光和自动聚焦
+                if (!isClear && isAutoExploreFocus && isFocusTouched(event)) {
+                    isAutoExploreFocus = false;
+                    SensorController.getInstance(mCameraView.getContext()).lockFocus();
+                    ((Camera2Engine) mCameraView.getCameraEngine()).lockExposure();
+                    postInvalidate();       // 取消曝光条
+                    return false;
+                // 锁定时再次down，则取消锁定
+                } else if (!isClear && !isAutoExploreFocus && isFocusTouched(event)) {
+                    isAutoExploreFocus = true;
+                    isClear = true;
+                    SensorController.getInstance(mCameraView.getContext()).unlockFocus();
+                    ((Camera2Engine) mCameraView.getCameraEngine()).unlockExposure();
+                    // 锁定但点击focus区域外，则不处理事件
+                } else if (!isClear && !isAutoExploreFocus) {
+                    return false;
+                }
                 downX = (int) event.getX();
                 // 每次点击初始化曝光值
                 exposureProgress = initExposureProgress;
@@ -298,6 +331,10 @@ public class FocusLayout extends View {
             // 离开屏幕
             // 有手指离开屏幕,但屏幕还有触点
             case MotionEvent.ACTION_UP: // 1
+                // 若显示焦点框 && 锁定，则取消事件
+                if (!isClear && !isAutoExploreFocus) {
+                    return false;
+                }
                 if (isMoveOccurs) {
                     break;
                 } else {
@@ -357,7 +394,9 @@ public class FocusLayout extends View {
         public void handleMessage(android.os.Message msg) {
             int tag = msg.what;
             if (tag == CLEAR_VIEW) {
-                clearView();
+                if (isAutoExploreFocus) {
+                    clearView();
+                }
             }
         };
     };
@@ -381,9 +420,18 @@ public class FocusLayout extends View {
         return x >= left && x <= right && y >= top && y <= bottom;
     }
 
+    /**
+     * 识别焦点框是否被有效点击
+     */
+    private synchronized boolean isFocusTouched(MotionEvent event) {
+        float x = event.getX();
+        float y = event.getY();
+        return x >= focusBmpLeftPoint && x <= focusBmpRightPoint && y >= focusBmpTopPoint && y <= focusBmpBottomPoint;
+    }
+
     // 曝光的调节
     private void actionMoveProgressExposure(MotionEvent event) {
-        if (isExposureThumbOnDragging && !isClear) {
+        if (isExposureThumbOnDragging && !isClear && isAutoExploreFocus) {
             exposureThumbCenterY = event.getY() + dy;
             if (exposureThumbCenterY < exposureTop) {
                 exposureThumbCenterY = exposureTop;
@@ -434,4 +482,14 @@ public class FocusLayout extends View {
         void onZoom(float zoomValue, PointF[] zoomPoint);
         void onExposure(float exposureValue, float[] bounds, PointF[] exposurePoint);
     }
+
+    /**
+     * 重置视图
+     */
+    public void resetView() {
+        isAutoExploreFocus = true;
+        isClear = true;
+        postInvalidate();
+    }
+
 }

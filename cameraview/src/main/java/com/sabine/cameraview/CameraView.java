@@ -322,6 +322,14 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     /**
+     * 获取CameraEngine
+     * @return
+     */
+    public CameraEngine getCameraEngine() {
+        return mCameraEngine;
+    }
+
+    /**
      * Engine is instantiated on creation and anytime
      * {@link #setEngine(Engine)} is called.
      */
@@ -683,22 +691,22 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @Override
     public void onExposure(float exposureValue, float[] bounds, PointF[] exposurePoint) {
         mCameraEngine.setExposureCorrection(exposureValue, bounds, exposurePoint, true);
-//        if (sensorController == null) {
-//            //重力感应 监听相机镜头移动
-//            sensorController = SensorController.getInstance(this.getContext());
-//            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
-//                @Override
-//                public void onFocus() {
-//                    if (!sensorController.isFocusLocked()) {
-//                        //移动后切换连续自动对焦
-//                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
-//                        sensorController.stop();
-//                        sensorController = null;
-//                    }
-//                }
-//            });
-//            sensorController.start();
-//        }
+        if (sensorController == null) {
+            //重力感应 监听相机镜头移动
+            sensorController = SensorController.getInstance(this.getContext());
+            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
+                @Override
+                public void onFocus() {
+                    if (!sensorController.isFocusLocked()) {
+                        //移动后切换连续自动对焦
+                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
+                        sensorController.stop();
+                        sensorController = null;
+                    }
+                }
+            });
+            sensorController.start();
+        }
     }
 
     // Some gesture layout detected a gesture. It's not known at this moment:
@@ -1153,6 +1161,15 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      */
     public float getZoom() {
         return mCameraEngine.getZoomValue();
+    }
+
+    public boolean supportAntishake() {
+        if (mCameraEngine != null) return mCameraEngine.supportAntishake();
+        return false;
+    }
+
+    public void setAntishake(boolean antishakeOn) {
+        mCameraEngine.setAntishake(antishakeOn);
     }
 
     /**
@@ -2698,4 +2715,16 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     //endregion
+
+    //////////////////////////////////////////////////////////////////////////////////////////////// region set/get
+    /**
+     * 获取focusLayout
+     * @return
+     */
+    public FocusLayout getFocusLayout() {
+        return mFocusLayout;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////// endregion
+
 }

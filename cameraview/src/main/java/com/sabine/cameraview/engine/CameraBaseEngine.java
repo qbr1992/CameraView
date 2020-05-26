@@ -91,6 +91,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     private Overlay mOverlay;
     boolean supportHighSpeed = false;
     boolean supportDuoCamera = false;
+    boolean antishakeOn = false;
 
     // Ops used for testing.
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
@@ -353,6 +354,18 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @Override
     public boolean supportDuoCamera() {
         return supportDuoCamera;
+    }
+
+    @Override
+    public boolean supportAntishake() {
+        CameraOptions cameraOptions = getCameraOptions();
+        if (cameraOptions != null) return cameraOptions.isStabSupported();
+        return false;
+    }
+
+    @Override
+    public void setAntishake(boolean antishakeOn) {
+        this.antishakeOn = antishakeOn;
     }
 
     /**

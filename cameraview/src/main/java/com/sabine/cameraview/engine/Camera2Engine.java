@@ -1046,6 +1046,19 @@ public class Camera2Engine extends CameraBaseEngine implements
         }
     }
 
+
+
+    @Override
+    public void setAntishake(boolean antishakeOn) {
+        super.setAntishake(antishakeOn);
+        if (mRepeatingRequestBuilder == null) return;
+        if (antishakeOn && supportAntishake()) {
+            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON);
+        } else if (supportAntishake()) {
+            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+        }
+    }
+
     //endregion
 
     //region Parameters
@@ -1063,6 +1076,11 @@ public class Camera2Engine extends CameraBaseEngine implements
         applyExposureCorrection(builder, 0F);
         applyPreviewFrameRate(builder, mPreviewFrameRate);
 
+        if (antishakeOn && supportAntishake()) {
+            builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON);
+        } else if (supportAntishake()) {
+            builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+        }
         if (oldBuilder != null) {
             // We might be in a metering operation, or the old builder might have some special
             // metering parameters. Copy these special keys over to the new builder.
@@ -1359,8 +1377,8 @@ public class Camera2Engine extends CameraBaseEngine implements
                                       @Nullable final PointF[] points,
                                       final boolean notify) {
         getOrchestrator().remove("reset AE");
-        mRepeatingRequestBuilder
-                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+//        mRepeatingRequestBuilder
+//                .set(CaptureRequest.CONTROL_AE_LOCK, false);
         applyRepeatingRequestBuilder();
         final float old = mExposureCorrectionValue;
         mExposureCorrectionValue = EVvalue;
@@ -1384,8 +1402,8 @@ public class Camera2Engine extends CameraBaseEngine implements
                 new Runnable() {
                     @Override
                     public void run() {
-                        mRepeatingRequestBuilder
-                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
+//                        mRepeatingRequestBuilder
+//                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
                         applyDefaultFocus(mRepeatingRequestBuilder);
                         applyRepeatingRequestBuilder();
                     }
@@ -1641,6 +1659,42 @@ public class Camera2Engine extends CameraBaseEngine implements
                     }
                 },
                 new MeterResetAction()
+        ).start(Camera2Engine.this);
+    }
+
+    /**
+     * 锁定曝光
+     */
+    @EngineThread
+    public void lockExposure() {
+        // Needs the PREVIEW state!
+        Actions.sequence(
+                new BaseAction() {
+                    @Override
+                    protected void onStart(@NonNull ActionHolder holder) {
+                        super.onStart(holder);
+                        holder.getBuilder(this)
+                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
+                    }
+                }
+        ).start(Camera2Engine.this);
+    }
+
+    /**
+     * 解锁曝光
+     */
+    @EngineThread
+    public void unlockExposure() {
+        // Needs the PREVIEW state!
+        Actions.sequence(
+                new BaseAction() {
+                    @Override
+                    protected void onStart(@NonNull ActionHolder holder) {
+                        super.onStart(holder);
+                        holder.getBuilder(this)
+                                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+                    }
+                }
         ).start(Camera2Engine.this);
     }
 

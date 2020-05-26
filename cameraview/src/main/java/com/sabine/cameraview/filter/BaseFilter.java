@@ -191,6 +191,10 @@ public abstract class BaseFilter implements Filter {
         if (this instanceof TwoParameterFilter) {
             ((TwoParameterFilter) copy).setParameter2(((TwoParameterFilter) this).getParameter2());
         }
+        // MultiParameterFilter录制时会调用
+        if (this instanceof MultiParameterFilter) {
+            ((MultiParameterFilter) copy).setParameterMulti(((MultiParameterFilter) this).getParameterMulti());
+        }
         return copy;
     }
 

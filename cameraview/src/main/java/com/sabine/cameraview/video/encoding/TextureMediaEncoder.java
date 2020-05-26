@@ -160,7 +160,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
     }
 
     private void onFilter(@NonNull Filter filter) {
-        mDrawer.setFilter(filter);
+        if (mDrawer != null) mDrawer.setFilter(filter);
     }
 
     private void onFrame(@NonNull Frame frame) {

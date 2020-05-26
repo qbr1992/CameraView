@@ -126,6 +126,11 @@ public class GlCameraPreview extends CameraPreview<GLSurfaceView, SurfaceTexture
     public void onPause() {
         super.onPause();
         getView().onPause();
+        // 防止MultiFilter时息屏后再打开崩溃
+        if (mOutputTextureDrawer != null) {
+            mOutputTextureDrawer.release();
+            mOutputTextureDrawer = null;
+        }
     }
 
     @Override

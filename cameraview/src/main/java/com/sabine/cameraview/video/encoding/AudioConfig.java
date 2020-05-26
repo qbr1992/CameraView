@@ -16,7 +16,7 @@ public class AudioConfig {
     public int channels = 1;
     public String encoder;
     public String mimeType = "audio/mp4a-latm";
-    public int samplingFrequency = 44100; // samples/sec
+    public int samplingFrequency = 48000; // samples/sec
 
     // Not configurable options (for now)
     final int encoding = AudioFormat.ENCODING_PCM_16BIT; // Determines the sampleSizePerChannel

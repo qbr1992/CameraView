@@ -703,6 +703,8 @@ public abstract class CameraEngine implements
     public abstract void setPreviewFrameRate(float previewFrameRate);
     public abstract boolean supportHighSpeed();
     public abstract boolean supportDuoCamera();
+    public abstract boolean supportAntishake();
+    public abstract void setAntishake(boolean antishakeOn);
     public abstract float getPreviewFrameRate();
 
     public abstract void setHasFrameProcessors(boolean hasFrameProcessors);

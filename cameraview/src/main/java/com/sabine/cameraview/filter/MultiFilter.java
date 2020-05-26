@@ -6,6 +6,7 @@ import android.opengl.GLES20;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
+import com.sabine.cameraview.filters.BeautyFilter;
 import com.sabine.cameraview.size.Size;
 import com.otaliastudios.opengl.core.Egloo;
 import com.otaliastudios.opengl.program.GlProgram;
@@ -162,7 +163,9 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
         //noinspection ConstantConditions
         if (size != null && !size.equals(state.size)) {
             state.size = size;
-            filter.setSize(size.getWidth(), size.getHeight());
+            if (filter != null) {
+                filter.setSize(size.getWidth(), size.getHeight());
+            }
         }
     }
 
@@ -304,4 +307,26 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
     public float getParameter2() {
         return parameter2;
     }
+
+    /**
+     * 获取美颜滤镜
+     * @return
+     */
+    public BeautyFilter getBeautyFilter() {
+        for (Filter filter : filters) {
+            if (filter instanceof BeautyFilter) {
+                return (BeautyFilter) filter;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取Filter列表
+     * @return
+     */
+    public List<Filter> getFilters() {
+        return filters;
+    }
+
 }
