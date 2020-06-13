@@ -113,11 +113,13 @@ public abstract class BaseAction implements Action {
         if (newState != state) {
             state = newState;
             for (ActionCallback callback : callbacks) {
-                callback.onActionStateChanged(this, state);
+                if (callback != null) callback.onActionStateChanged(this, state);
             }
             if (state == STATE_COMPLETED) {
-                holder.removeAction(this);
-                onCompleted(holder);
+                if (holder != null) {
+                    holder.removeAction(this);
+                    onCompleted(holder);
+                }
             }
         }
     }

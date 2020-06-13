@@ -24,6 +24,8 @@ import com.sabine.cameraview.R;
 import com.sabine.cameraview.SensorController;
 import com.sabine.cameraview.engine.Camera2Engine;
 
+import java.lang.reflect.Method;
+
 public class FocusLayout extends View {
 
     // 放大缩小
@@ -296,7 +298,16 @@ public class FocusLayout extends View {
                     isAutoExploreFocus = false;
                     SensorController.getInstance(mCameraView.getContext()).lockFocus();
                     ((Camera2Engine) mCameraView.getCameraEngine()).lockExposure();
+                    ((Camera2Engine) mCameraView.getCameraEngine()).lockFocus();
+                    if (mFocusListener != null) mFocusListener.onExposure(exposureProgress, new float[4], new PointF[1]);
                     postInvalidate();       // 取消曝光条
+                    try {
+                        Class<?> aClass = Class.forName("com.sabine.library.utils.StatisticsUtils");
+                        Method method = aClass.getMethod("numStatistics", Context.class, String.class);
+                        method.invoke(aClass.newInstance(), mCameraView.getContext(), "event_record_lock_focus");
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                     return false;
                 // 锁定时再次down，则取消锁定
                 } else if (!isClear && !isAutoExploreFocus && isFocusTouched(event)) {
@@ -304,8 +315,9 @@ public class FocusLayout extends View {
                     isClear = true;
                     SensorController.getInstance(mCameraView.getContext()).unlockFocus();
                     ((Camera2Engine) mCameraView.getCameraEngine()).unlockExposure();
-                    // 锁定但点击focus区域外，则不处理事件
-                } else if (!isClear && !isAutoExploreFocus) {
+                    ((Camera2Engine) mCameraView.getCameraEngine()).unlockFocus();
+                // 锁定但点击focus区域外，则不处理事件
+                } else if (!isClear && !isAutoExploreFocus) {       // bug trigger 1
                     return false;
                 }
                 downX = (int) event.getX();
@@ -342,7 +354,15 @@ public class FocusLayout extends View {
                     // 点击设置焦距和测光
 //                    focusAtPoints(event);
                     isShowExposure = true;
-                    if (mFocusListener != null) mFocusListener.onExposure(exposureProgress, new float[4], new PointF[1]);
+                    if (mFocusListener != null) mFocusListener.onExposure(exposureProgress, new float[4], new PointF[1]);       // 会导致华为手机锁定对焦曝光
+//                    mCameraView.postDelayed(new Runnable() {
+//                        @Override
+//                        public void run() {
+//                            if (isAutoExploreFocus) {
+//                                ((Camera2Engine) mCameraView.getCameraEngine()).unlockExposure();       // 解除锁定曝光对焦
+//                            }
+//                        }
+//                    }, 3000);
                 }
                 /* 清空 */
                 pointerDown = false;
@@ -369,6 +389,7 @@ public class FocusLayout extends View {
             // 当屏幕上还有触点（手指），再有一个手指压下屏幕
             case 261:
             case MotionEvent.ACTION_POINTER_DOWN: //5
+                isClear = true;         // 解决双指接触屏幕后，焦点框可能一直无法显示问题 --> bug trigger 1
                 isShowExposure = false;
                 // 缩放
                 mode = ZOOM;

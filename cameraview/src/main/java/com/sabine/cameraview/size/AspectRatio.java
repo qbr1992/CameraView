@@ -33,13 +33,18 @@ public class AspectRatio implements Comparable<AspectRatio> {
     @NonNull
     public static AspectRatio of(int x, int y) {
         int gcd = gcd(x, y);
-        x /= gcd;
-        y /= gcd;
-        String key = x + ":" + y;
-        AspectRatio cached = sCache.get(key);
-        if (cached == null) {
+        AspectRatio cached;
+        if (gcd != 0) {
+            x /= gcd;
+            y /= gcd;
+            String key = x + ":" + y;
+            cached = sCache.get(key);
+            if (cached == null) {
+                cached = new AspectRatio(x, y);
+                sCache.put(key, cached);
+            }
+        } else {
             cached = new AspectRatio(x, y);
-            sCache.put(key, cached);
         }
         return cached;
     }

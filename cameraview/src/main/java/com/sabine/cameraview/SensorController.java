@@ -26,7 +26,7 @@ public class SensorController implements SensorEventListener {
     public static final int STATUS_MOVE = 2;
     private int mX, mY, mZ;
     private int STATUE = STATUS_NONE;
-    private boolean canFocus = false;
+//    private boolean canFocus = false;
     private boolean canFocusIn = false;
     private boolean isFocusing = false;
     private Calendar mCalendar;
@@ -53,15 +53,15 @@ public class SensorController implements SensorEventListener {
     }
 
     public void start() {
-        if (canFocus) return;
+//        if (canFocus) return;
         restParams();
-        canFocus = true;
+//        canFocus = true;
         mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
     }
 
     public void stop() {
         mSensorManager.unregisterListener(this, mSensor);
-        canFocus = false;
+//        canFocus = false;
     }
 
 
@@ -141,7 +141,8 @@ public class SensorController implements SensorEventListener {
      * @return
      */
     public boolean isFocusLocked() {
-        return canFocus && isFocusing;
+//        return canFocus && isFocusing;
+        return isFocusing;
     }
 
     /**

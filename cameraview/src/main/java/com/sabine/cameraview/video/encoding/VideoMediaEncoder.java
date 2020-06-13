@@ -178,7 +178,7 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
 
     @Override
     protected int getEncodedBitRate() {
-        Log.e(TAG, "getEncodedBitRate: mVideoRealBitrate = " + mVideoRealBitrate);
+        LogUtil.e(TAG, "getEncodedBitRate: mVideoRealBitrate = " + mVideoRealBitrate);
         return mVideoRealBitrate;
     }
 

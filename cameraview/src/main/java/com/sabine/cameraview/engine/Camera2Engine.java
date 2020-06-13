@@ -17,7 +17,6 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.location.Location;
-import android.media.CamcorderProfile;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Build;
@@ -26,11 +25,11 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
-import android.os.Handler;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Range;
 import android.util.Rational;
+import android.util.SizeF;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 
@@ -40,6 +39,7 @@ import com.google.android.gms.tasks.Tasks;
 import com.sabine.cameraview.CameraException;
 import com.sabine.cameraview.CameraOptions;
 import com.sabine.cameraview.PictureResult;
+import com.sabine.cameraview.SensorController;
 import com.sabine.cameraview.VideoResult;
 import com.sabine.cameraview.controls.Facing;
 import com.sabine.cameraview.controls.Flash;
@@ -77,13 +77,13 @@ import com.sabine.cameraview.video.Full2VideoRecorder;
 import com.sabine.cameraview.video.SnapshotVideoRecorder;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
+
+import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
+import static android.hardware.camera2.CameraMetadata.*;
 
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 public class Camera2Engine extends CameraBaseEngine implements
@@ -122,6 +122,8 @@ public class Camera2Engine extends CameraBaseEngine implements
     // Use COW to properly synchronize the list. We'll iterate much more than mutate
     private final List<Action> mActions = new CopyOnWriteArrayList<>();
     private MeterAction mMeterAction;
+    private String mWideCameraId;        // 广角cameraID
+    private String mTeleCameraId;        // 长焦cameraID
 
     public Camera2Engine(Callback callback) {
         super(callback);
@@ -365,8 +367,8 @@ public class Camera2Engine extends CameraBaseEngine implements
     @EngineThread
     @Override
     protected final boolean collectCameraInfo(@NonNull Facing facing) {
-        int internalFacing = mMapper.mapFacing(facing);
-        Log.e(TAG, "collectCameraInfo: facing = " + facing + ", internalFacing = " + internalFacing);
+        int internalFacing = mMapper.mapFacing(facing);     // 长焦/广角/后置映射为后置相机，前置相机映射为前置相机
+        LogUtil.e(TAG, "collectCameraInfo: facing = " + facing + ", internalFacing = " + internalFacing);
         String[] cameraIds = null;
         try {
             cameraIds = mManager.getCameraIdList();
@@ -375,49 +377,37 @@ public class Camera2Engine extends CameraBaseEngine implements
             // However, let's launch an unrecoverable exception.
             throw createCameraException(e);
         }
-        Set<String> ids = null;
         supportDuoCamera = false;
-        LOG.e(TAG, "Facing:", facing,
+        LOG.i(TAG, "Facing:", facing,
                 "Internal:", internalFacing,
                 "Cameras:", cameraIds.length);
-        for (String cameraId : cameraIds) {
-            try {
-                CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
-                if (readCharacteristic(characteristics,
-                        CameraCharacteristics.LENS_FACING, -99) == CameraCharacteristics.LENS_FACING_BACK) {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                        ids = characteristics.getPhysicalCameraIds();
-                        if (ids.size() >= 3) {
-                            supportDuoCamera = true;
-                            break;
-                        }
-                    }
-                }
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
-            }
+        // Android版本大于28，避免低版本api支持不规范完整问题
+        if (cameraIds.length>=4 && android.os.Build.VERSION.SDK_INT>=android.os.Build.VERSION_CODES.P) {
+            supportDuoCamera = true;
         }
         for (String cameraId : cameraIds) {
             try {
                 CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
                 if (internalFacing == readCharacteristic(characteristics,
                         CameraCharacteristics.LENS_FACING, -99)) {
+                    // 切换后置摄像头时，需判断普通/长焦/广角
                     if (facing != Facing.FRONT) {
-                        if (ids != null && ids.size() >= 3) {
+                        if (supportDuoCamera) {
                             switch (facing) {
                                 case BACK_NORMAL:
-                                    mCameraId = (String) ids.toArray()[0];
+                                    mCameraId = cameraIds[0];
                                     break;
                                 case BACK_WIDE:
-                                    mCameraId = (String) ids.toArray()[1];
+                                    mCameraId = getWideCameraId(cameraIds);
                                     break;
                                 case BACK_TELE:
-                                    mCameraId = (String) ids.toArray()[2];
+                                    mCameraId = getTeleCameraId(cameraIds);
                                     break;
                             }
                         } else {
                             mCameraId = cameraId;
                         }
+                    // 切换前置摄像头时，无需判断摄像头类型
                     } else {
                         mCameraId = cameraId;
                     }
@@ -427,11 +417,91 @@ public class Camera2Engine extends CameraBaseEngine implements
                     return true;
                 }
             } catch (CameraAccessException ignore) {
-                // This specific camera has been disconnected.
-                // Keep searching in other camerIds.
             }
         }
         return false;
+    }
+
+    /**
+     * 获取广角cameraId
+     * @param cameraIds
+     * @return
+     * @throws CameraAccessException
+     */
+    private String getWideCameraId(String[] cameraIds) throws CameraAccessException {
+        if (mWideCameraId != null) {
+            return mWideCameraId;
+        }
+        float bigFovSize = 0;           // 记录的大的逻辑camera device FovSize
+        // 华为nova,i=0时计算得为广角，所以从1开始计算
+        for (int i = 1; i < cameraIds.length; i++) {
+            String cameraId = cameraIds[i];
+            CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
+            int cOrientation = characteristics.get(CameraCharacteristics.LENS_FACING);
+            if (cOrientation == CameraCharacteristics.LENS_FACING_BACK) {
+                float[] maxFocus = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                SizeF size = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE);
+                float w = size.getWidth();
+                float h = size.getHeight();
+                float horizontalAngle = (float) (2*Math.atan(w/(maxFocus[0]*2)));
+                float verticalAngle = (float) (2*Math.atan(h/(maxFocus[0]*2)));
+                float currentFovSize = horizontalAngle * verticalAngle;
+                // 适配mate30pro，有的cameraId支持的流没有mPictureFormat类型
+                StreamConfigurationMap streamMap = characteristics.get(SCALER_STREAM_CONFIGURATION_MAP);
+                if (streamMap == null) {
+                    throw new RuntimeException("StreamConfigurationMap is null. Should not happen.");
+                }
+                int[] pictureFormats = streamMap.getOutputFormats();
+                int format;
+                switch (mPictureFormat) {
+                    case JPEG: format = ImageFormat.JPEG; break;
+                    case DNG: format = ImageFormat.RAW_SENSOR; break;
+                    default: throw new IllegalArgumentException("Unknown format:"+ mPictureFormat);
+                }
+                boolean hasPictureFormat = false;
+                for (int picFormat : pictureFormats) {
+                    if (picFormat == format) {
+                        hasPictureFormat = true;
+                        break;
+                    }
+                }
+                if (currentFovSize > bigFovSize && hasPictureFormat) {
+                    mWideCameraId = cameraId;
+                    bigFovSize = currentFovSize;
+                }
+            }
+        }
+        return mWideCameraId;
+    }
+
+    /**
+     * 获取长焦cameraId
+     * @param cameraIds
+     * @return
+     * @throws CameraAccessException
+     */
+    private String getTeleCameraId(String[] cameraIds) throws CameraAccessException {
+        if (mTeleCameraId != null) {
+            return mTeleCameraId;
+        }
+//        float diffFocalLength = 0;           // 记录的焦距的范围
+        float tempMaxLength = 0;                // 暂存最大焦距
+        for (int i = 0; i < cameraIds.length; i++) {
+            String cameraId = cameraIds[i];
+            CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
+            int cOrientation = characteristics.get(CameraCharacteristics.LENS_FACING);
+            if (cOrientation == CameraCharacteristics.LENS_FACING_BACK) {
+                float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+//                float minLength = focalLengths[0];
+                float currentMaxLength = focalLengths[focalLengths.length-1];
+//                float currentDiffFocalLength = currentMaxLength- minLength;
+                if (currentMaxLength > tempMaxLength) {
+                    mTeleCameraId = cameraId;
+                    tempMaxLength = currentMaxLength;
+                }
+            }
+        }
+        return mTeleCameraId;
     }
 
     //endregion
@@ -1098,15 +1168,45 @@ public class Camera2Engine extends CameraBaseEngine implements
     }
 
     @SuppressWarnings("WeakerAccess")
-    protected void applyDefaultFocus(@NonNull CaptureRequest.Builder builder) {
+    protected void applyDefaultFocus(@NonNull final CaptureRequest.Builder builder) {
         int[] modesArray = readCharacteristic(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES,
                 new int[]{});
         List<Integer> modes = new ArrayList<>();
         for (int mode : modesArray) { modes.add(mode); }
         if (getMode() == Mode.VIDEO &&
                 modes.contains(CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)) {
-            builder.set(CaptureRequest.CONTROL_AF_MODE,
-                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+            if (mLastRepeatingResult != null) {
+                Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
+                Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
+                Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
+                Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
+//                Log.d("mLastRepeatingResult1", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:" + aeMode);
+            }
+            if (SensorController.getInstance(getCallback().getContext()).isFocusLocked()) {
+//                builder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+//                        CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+//                getOrchestrator().scheduleStatefulDelayed("AF_MODE_MACRO",
+//                        CameraState.PREVIEW,
+//                        200,
+//                        new Runnable() {
+//                            @Override
+//                            public void run() {
+//                                builder.set(CaptureRequest.CONTROL_AF_MODE,
+//                                        CaptureRequest.CONTROL_AF_MODE_MACRO);
+//                            }
+//                        });
+
+            } else {
+                // 解决华为手机点击屏幕后，无法自动对焦问题
+//                if (mLastRepeatingResult!=null && mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE) == CONTROL_AF_STATE_ACTIVE_SCAN) {
+//                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+//                            CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+//                }
+                builder.set(CaptureRequest.CONTROL_AF_MODE,
+                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+            }
+//            builder.set(CaptureRequest.CONTROL_AF_MODE,
+//                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
             return;
         }
 
@@ -1376,10 +1476,10 @@ public class Camera2Engine extends CameraBaseEngine implements
                                       @NonNull final float[] bounds,
                                       @Nullable final PointF[] points,
                                       final boolean notify) {
-        getOrchestrator().remove("reset AE");
-//        mRepeatingRequestBuilder
-//                .set(CaptureRequest.CONTROL_AE_LOCK, false);
-        applyRepeatingRequestBuilder();
+//        getOrchestrator().remove("reset AE");
+////        mRepeatingRequestBuilder
+////                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+//        applyRepeatingRequestBuilder();
         final float old = mExposureCorrectionValue;
         mExposureCorrectionValue = EVvalue;
         mExposureCorrectionTask = getOrchestrator().scheduleStateful(
@@ -1396,18 +1496,18 @@ public class Camera2Engine extends CameraBaseEngine implements
                 }
             }
         });
-        getOrchestrator().scheduleStatefulDelayed("reset AE",
-                CameraState.PREVIEW,
-                200,
-                new Runnable() {
-                    @Override
-                    public void run() {
-//                        mRepeatingRequestBuilder
-//                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
-                        applyDefaultFocus(mRepeatingRequestBuilder);
-                        applyRepeatingRequestBuilder();
-                    }
-                });
+//        getOrchestrator().scheduleStatefulDelayed("reset AE",
+//                CameraState.PREVIEW,
+//                200,
+//                new Runnable() {
+//                    @Override
+//                    public void run() {
+////                        mRepeatingRequestBuilder
+////                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
+////                        applyDefaultFocus(mRepeatingRequestBuilder);
+//                        applyRepeatingRequestBuilder();
+//                    }
+//                });
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -1615,7 +1715,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                                     new Runnable() {
                                 @Override
                                 public void run() {
-//                                    unlockAndResetMetering();
+                                    unlockAndResetMetering();
                                 }
                             });
                         }
@@ -1642,19 +1742,33 @@ public class Camera2Engine extends CameraBaseEngine implements
 
     @EngineThread
     public void unlockAndResetMetering() {
+        final Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
+        Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
+        Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
+        Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
+//        Log.d("unlockAndResetMetering", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:" + aeMode);
         // Needs the PREVIEW state!
         Actions.sequence(
                 new BaseAction() {
                     @Override
                     protected void onStart(@NonNull ActionHolder holder) {
                         super.onStart(holder);
-                        applyDefaultFocus(holder.getBuilder(this));
-                        holder.getBuilder(this)
-                                .set(CaptureRequest.CONTROL_AE_LOCK, false);
-//                        holder.getBuilder(this)
-//                                .set(CaptureRequest.CONTROL_AWB_LOCK, false);
-                        holder.applyBuilder(this);
-                        setState(STATE_COMPLETED);
+                        if (!SensorController.getInstance(getCallback().getContext()).isFocusLocked()) {
+//                            Log.d("onExposureCorrection", "unlockAndResetMetering");
+                            applyDefaultFocus(holder.getBuilder(this));
+                            // 解决部分低版本（Android6/7/8）手机点击屏幕后，无法恢复自动对焦问题（华为mate10 Android8仍存在该问题）
+                            // CONTROL_AF_STATE_ACTIVE_SCAN判断一次点击后，CONTROL_AF_STATE_PASSIVE_SCAN判断锁屏后
+                            if (afState == CONTROL_AF_STATE_ACTIVE_SCAN || afState == CONTROL_AF_STATE_PASSIVE_SCAN) {
+                                holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
+                                        CONTROL_AF_TRIGGER_CANCEL);
+                            }
+                            holder.getBuilder(this)
+                                    .set(CaptureRequest.CONTROL_AE_LOCK, false);
+                            holder.getBuilder(this)
+                                    .set(CaptureRequest.CONTROL_AWB_LOCK, false);
+                            holder.applyBuilder(this);
+                            setState(STATE_COMPLETED);
+                        }
                         // TODO should wait results?
                     }
                 },
@@ -1696,6 +1810,74 @@ public class Camera2Engine extends CameraBaseEngine implements
                     }
                 }
         ).start(Camera2Engine.this);
+    }
+
+    /**
+     * 锁定焦点
+     */
+    @EngineThread
+    public void lockFocus() {
+        Actions.sequence(
+                new BaseAction() {
+                    @Override
+                    protected void onStart(@NonNull final ActionHolder holder) {
+                        super.onStart(holder);
+                        Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
+                        Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
+                        Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
+                        Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
+                        Log.d("lockFocus", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:");
+                        switch (afState) {
+                            // 0,6
+                            case CONTROL_AF_STATE_INACTIVE:
+                            case CONTROL_AF_STATE_PASSIVE_UNFOCUSED:
+                                mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+                                        CaptureRequest.CONTROL_AF_TRIGGER_START);
+                                mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+                                break;
+                            // 2,3,4,5
+                            case CONTROL_AF_STATE_PASSIVE_FOCUSED:
+                            case CONTROL_AF_STATE_ACTIVE_SCAN:
+                            case CONTROL_AF_STATE_FOCUSED_LOCKED:
+                            case CONTROL_AF_STATE_NOT_FOCUSED_LOCKED:
+                                mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+                                        CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+                                break;
+                        }
+                        applyRepeatingRequestBuilder();
+                    }
+                }
+        ).start(Camera2Engine.this);
+    }
+
+    /**
+     * 解锁焦点
+     */
+    @EngineThread
+    public void unlockFocus() {
+        Actions.sequence(
+                new BaseAction() {
+                    @Override
+                    protected void onStart(@NonNull ActionHolder holder) {
+                        super.onStart(holder);
+                        holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER, CONTROL_AF_TRIGGER_CANCEL);
+                    }
+                }
+        ).start(Camera2Engine.this);
+//        // Needs the PREVIEW state!
+//        mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+//                CaptureRequest.CONTROL_AF_TRIGGER_START);
+//        getOrchestrator().scheduleStatefulDelayed("reset AF",
+//                CameraState.PREVIEW,
+//                200,
+//                new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        applyDefaultFocus(mRepeatingRequestBuilder);
+//                        applyRepeatingRequestBuilder();
+//                    }
+//                });
     }
 
     //endregion

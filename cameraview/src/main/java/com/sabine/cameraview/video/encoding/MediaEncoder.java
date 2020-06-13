@@ -340,7 +340,6 @@ public abstract class MediaEncoder {
         mBuffers = null;
         setState(STATE_STOPPED);
         if (mWorker != null) mWorker.destroy();
-        Log.e(TAG, "onPrepare onStopped: mController == " + mController);
         if (mController != null) mController.notifyStopped();
         recordState = false;
     }
@@ -513,7 +512,6 @@ public abstract class MediaEncoder {
     @SuppressWarnings("WeakerAccess")
     public final void notifyFirstFrameMillis(long firstFrameMillis) {
         mStartTimeUs = firstFrameMillis;
-        Log.e(TAG, "drainOutput notifyFirstFrameMillis: mStartTimeUs === " + mStartTimeUs);
     }
 
     /**

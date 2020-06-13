@@ -667,6 +667,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         // Pass to our own GestureLayouts
         CameraOptions options = mCameraEngine.getCameraOptions(); // Non null
         if (options == null) return true;
+        if (mFocusLayout != null) mFocusLayout.onTouchEvent(event);
         /*if (mPinchGestureFinder.onTouchEvent(event)) {
             LOG.i("onTouchEvent", "pinch!");
             onGesture(mPinchGestureFinder, options);
@@ -677,7 +678,6 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
             LOG.i("onTouchEvent", "tap!");
             onGesture(mTapGestureFinder, options);
         }
-        if (mFocusLayout != null) mFocusLayout.onTouchEvent(event);
         return true;
     }
 
@@ -691,22 +691,24 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @Override
     public void onExposure(float exposureValue, float[] bounds, PointF[] exposurePoint) {
         mCameraEngine.setExposureCorrection(exposureValue, bounds, exposurePoint, true);
-        if (sensorController == null) {
-            //重力感应 监听相机镜头移动
-            sensorController = SensorController.getInstance(this.getContext());
-            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
-                @Override
-                public void onFocus() {
-                    if (!sensorController.isFocusLocked()) {
-                        //移动后切换连续自动对焦
-                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
-                        sensorController.stop();
-                        sensorController = null;
-                    }
-                }
-            });
-            sensorController.start();
-        }
+//        if (sensorController == null) {
+//            //重力感应 监听相机镜头移动
+//            sensorController = SensorController.getInstance(this.getContext());
+//            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
+//                @Override
+//                public void onFocus() {
+//                    Log.d("onExposureCorrection", "out");
+//                    if (!sensorController.isFocusLocked()) {
+//                        Log.d("onExposureCorrection", "in");
+//                        //移动后切换连续自动对焦
+//                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
+//                        sensorController.stop();
+//                        sensorController = null;
+//                    }
+//                }
+//            });
+//            sensorController.start();
+//        }
     }
 
     // Some gesture layout detected a gesture. It's not known at this moment:
@@ -725,9 +727,11 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                 break;
 
             case AUTO_FOCUS:
-                Size size = new Size(getWidth(), getHeight());
-                MeteringRegions regions = MeteringRegions.fromPoint(size, points[0]);
-                mCameraEngine.startAutoFocus(gesture, regions, points[0]);
+                if (!SensorController.getInstance(getContext()).isFocusLocked()) {
+                    Size size = new Size(getWidth(), getHeight());
+                    MeteringRegions regions = MeteringRegions.fromPoint(size, points[0]);
+                    mCameraEngine.startAutoFocus(gesture, regions, points[0]);
+                }
                 break;
 
             case ZOOM:
