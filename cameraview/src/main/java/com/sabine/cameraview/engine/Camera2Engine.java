@@ -709,7 +709,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                     // This SHOULD be a library error so we throw a RuntimeException.
                     String message = LOG.e("onConfigureFailed! Session", session);
-                    throw new RuntimeException(message);
+//                    throw new RuntimeException(message);
                 }
 
                 @Override
