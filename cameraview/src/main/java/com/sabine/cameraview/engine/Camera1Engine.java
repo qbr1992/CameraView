@@ -880,6 +880,35 @@ public class Camera1Engine extends CameraBaseEngine implements
         });
     }
 
+    @Override
+    public void cancelAutoFocus() {
+        try {
+            mCamera.cancelAutoFocus();
+        }
+        catch(RuntimeException e) {
+            // had a report of crash on some devices, see comment at https://sourceforge.net/p/opencamera/tickets/4/ made on 20140520
+            LOG.e("cancelAutoFocus() failed");
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public boolean supportsAutoFocus() {
+        try {
+            Camera.Parameters parameters = mCamera.getParameters();
+            String focus_mode = parameters.getFocusMode();
+            // getFocusMode() is documented as never returning null, however I've had null pointer exceptions reported in Google Play from the below line (v1.7),
+            // on Galaxy Tab 10.1 (GT-P7500), Android 4.0.3 - 4.0.4; HTC EVO 3D X515m (shooteru), Android 4.0.3 - 4.0.4
+            if( focus_mode != null && ( focus_mode.equals(Camera.Parameters.FOCUS_MODE_AUTO) || focus_mode.equals(Camera.Parameters.FOCUS_MODE_MACRO) ) ) {
+                return true;
+            }
+        }
+        catch(RuntimeException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     //endregion
 }
 

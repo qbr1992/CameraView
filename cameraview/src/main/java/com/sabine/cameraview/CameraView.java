@@ -140,6 +140,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     private Filter mPendingFilter;
     private float mFilterLevel;
     private int mFrameProcessingExecutors;
+    private Context mContext;
 
     // Components
     private Handler mUiHandler;
@@ -190,6 +191,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @SuppressWarnings("WrongConstant")
     private void initialize(@NonNull Context context, @Nullable AttributeSet attrs) {
         mInEditor = isInEditMode();
+        mContext = context;
         if (mInEditor) return;
 
         setWillNotDraw(false);
@@ -691,24 +693,6 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @Override
     public void onExposure(float exposureValue, float[] bounds, PointF[] exposurePoint) {
         mCameraEngine.setExposureCorrection(exposureValue, bounds, exposurePoint, true);
-//        if (sensorController == null) {
-//            //重力感应 监听相机镜头移动
-//            sensorController = SensorController.getInstance(this.getContext());
-//            sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
-//                @Override
-//                public void onFocus() {
-//                    Log.d("onExposureCorrection", "out");
-//                    if (!sensorController.isFocusLocked()) {
-//                        Log.d("onExposureCorrection", "in");
-//                        //移动后切换连续自动对焦
-//                        ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
-//                        sensorController.stop();
-//                        sensorController = null;
-//                    }
-//                }
-//            });
-//            sensorController.start();
-//        }
     }
 
     // Some gesture layout detected a gesture. It's not known at this moment:
@@ -822,7 +806,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         }
     }
 
-    private void clearLifecycleObserver() {
+    public void clearLifecycleObserver() {
         if (mLifecycle != null) {
             mLifecycle.removeObserver(this);
             mLifecycle = null;
@@ -1798,7 +1782,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     public void endRecordVideo(boolean isPause) {
         if (isStarted) {
-            stopVideo();
+            stopVideo(isPause);
             isStarted = false;
 //            if (isPause) {
 //                for (CameraListener listener : mListeners) {
@@ -1900,8 +1884,8 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * Stops capturing video or video snapshots being recorded, if there was any.
      * This will fire {@link CameraListener#onVideoTaken(VideoResult)}.
      */
-    public void stopVideo() {
-        mCameraEngine.stopVideo();
+    public void stopVideo(boolean isCameraShutdown) {
+        mCameraEngine.stopVideo(isCameraShutdown);
     }
 
     /**
@@ -2280,6 +2264,24 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
                     for (CameraListener listener : mListeners) {
                         listener.onAutoFocusEnd(success, point);
+                    }
+
+                    if (sensorController == null) {
+                        //重力感应 监听相机镜头移动
+                        sensorController = SensorController.getInstance(mContext);
+                        sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
+                            @Override
+                            public void onFocus() {
+                                if (!sensorController.isFocusLocked()) {
+                                    //移动后切换连续自动对焦
+//                                    setExposureCorrection(0.0f);
+                                    ((Camera2Engine)mCameraEngine).unlockAndResetMetering();
+                                    sensorController.stop();
+                                    sensorController = null;
+                                }
+                            }
+                        });
+                        sensorController.start();
                     }
                 }
             });

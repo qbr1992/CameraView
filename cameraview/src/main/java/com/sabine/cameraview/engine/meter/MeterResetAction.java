@@ -15,10 +15,13 @@ public class MeterResetAction extends ActionWrapper {
     private final BaseAction action;
 
     public MeterResetAction() {
+//        this.action = Actions.together(
+//                new ExposureReset(),
+//                new FocusReset(),
+//                new WhiteBalanceReset()
+//        );
         this.action = Actions.together(
-                new ExposureReset(),
-                new FocusReset(),
-                new WhiteBalanceReset()
+                new FocusReset()
         );
     }
 

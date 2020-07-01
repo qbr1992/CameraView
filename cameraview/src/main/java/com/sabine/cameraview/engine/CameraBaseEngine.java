@@ -639,24 +639,24 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
-    public final void stopVideo() {
+    public final void stopVideo(final boolean isCameraShutdown) {
         LogUtil.w(TAG, "stopVideo");
         getOrchestrator().schedule("stop video", true, new Runnable() {
             @Override
             public void run() {
                 LogUtil.w(TAG, "stopVideo running");
                 LOG.i("stopVideo", "running. isTakingVideo?", isTakingVideo());
-                onStopVideo();
+                onStopVideo(isCameraShutdown);
             }
         });
     }
 
     @EngineThread
     @SuppressWarnings("WeakerAccess")
-    protected void onStopVideo() {
+    protected void onStopVideo(boolean isCameraShutdown) {
         LogUtil.w(TAG, "onStopVideo");
         if (mVideoRecorder != null) {
-            mVideoRecorder.stop(false);
+            mVideoRecorder.stop(isCameraShutdown);
             // Do not null this, so we respond correctly to isTakingVideo(),
             // which checks for recorder presence and recorder.isRecording().
             // It will be nulled in onVideoResult.

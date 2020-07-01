@@ -1,5 +1,6 @@
 package com.sabine.cameraview.engine.meter;
 
+import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
@@ -20,6 +21,7 @@ public class FocusMeter extends BaseMeter {
 
     private static final String TAG = FocusMeter.class.getSimpleName();
     private static final CameraLogger LOG = CameraLogger.create(TAG);
+    private boolean mSupportsAF;
 
     public FocusMeter(@NonNull List<MeteringRectangle> areas, boolean skipIfPossible) {
         super(areas, skipIfPossible);
@@ -29,11 +31,47 @@ public class FocusMeter extends BaseMeter {
     protected boolean checkIsSupported(@NonNull ActionHolder holder) {
         // Exclude OFF and EDOF as per docs. These do no support the trigger.
         Integer afMode = holder.getBuilder(this).get(CaptureRequest.CONTROL_AF_MODE);
-        boolean result = afMode != null &&
+        mSupportsAF = afMode != null &&
                 (afMode == CameraCharacteristics.CONTROL_AF_MODE_AUTO
                         || afMode == CameraCharacteristics.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                         || afMode == CameraCharacteristics.CONTROL_AF_MODE_CONTINUOUS_VIDEO
                         || afMode == CameraCharacteristics.CONTROL_AF_MODE_MACRO);
+        LOG.i("checkIsSupported:", mSupportsAF, afMode);
+
+        return mSupportsAF || checkIsSupportedAE(holder)/* || checkIsSupportedAWB(holder)*/;
+    }
+
+    private boolean checkIsSupportedAE(@NonNull ActionHolder holder) {
+        // In our case, this means checking if we support the AE precapture trigger.
+        boolean isLegacy = readCharacteristic(
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL, -1)
+                == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY;
+        Integer aeMode = holder.getBuilder(this).get(CaptureRequest.CONTROL_AE_MODE);
+        boolean isAEOn = aeMode != null &&
+                (aeMode == CameraCharacteristics.CONTROL_AE_MODE_ON
+                        || aeMode == CameraCharacteristics.CONTROL_AE_MODE_ON_ALWAYS_FLASH
+                        || aeMode == CameraCharacteristics.CONTROL_AE_MODE_ON_AUTO_FLASH
+                        || aeMode == CameraCharacteristics.CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE
+                        || aeMode == 5
+                        /* CameraCharacteristics.CONTROL_AE_MODE_ON_EXTERNAL_FLASH, API 28 */);
+        boolean mSupportsTriggerAE = !isLegacy;
+        boolean mSupportsAreasAE = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE,
+                0) > 0;
+        boolean result = isAEOn && (mSupportsTriggerAE || mSupportsAreasAE);
+        LOG.i("checkIsSupported:", result,
+                "trigger:", mSupportsTriggerAE,
+                "areas:", mSupportsAreasAE);
+        return result;
+    }
+
+    private boolean checkIsSupportedAWB(@NonNull ActionHolder holder) {
+        boolean isNotLegacy = readCharacteristic(
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL, -1)
+                != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY;
+        Integer awbMode = holder.getBuilder(this).get(CaptureRequest.CONTROL_AWB_MODE);
+        boolean result = isNotLegacy
+                && awbMode != null
+                && awbMode == CaptureRequest.CONTROL_AWB_MODE_AUTO;
         LOG.i("checkIsSupported:", result);
         return result;
     }
@@ -57,8 +95,7 @@ public class FocusMeter extends BaseMeter {
     @Override
     protected void onStarted(@NonNull ActionHolder holder, @NonNull List<MeteringRectangle> areas) {
         LOG.i("onStarted:", "with areas:", areas);
-        holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
-                CaptureRequest.CONTROL_AF_TRIGGER_START);
+
         int maxRegions = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AF,
                 0);
         if (!areas.isEmpty() && maxRegions > 0) {
@@ -66,7 +103,33 @@ public class FocusMeter extends BaseMeter {
             holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_REGIONS,
                     areas.subList(0, max).toArray(new MeteringRectangle[]{}));
         }
+
+        int maxRegionsAE = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE, 0);
+        if (!areas.isEmpty() && maxRegionsAE > 0) {
+            int max = Math.min(maxRegionsAE, areas.size());
+            holder.getBuilder(this).set(CaptureRequest.CONTROL_AE_REGIONS,
+                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
+        }
+
+//        int maxRegionsAWB = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AWB,
+//                0);
+//        if (!areas.isEmpty() && maxRegionsAWB > 0) {
+//            int max = Math.min(maxRegionsAWB, areas.size());
+//            holder.getBuilder(this).set(CaptureRequest.CONTROL_AWB_REGIONS,
+//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
+//        }
+        holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER, CameraCharacteristics.CONTROL_AF_TRIGGER_IDLE);
         holder.applyBuilder(this);
+
+        if (mSupportsAF) {
+            holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
+                    CaptureRequest.CONTROL_AF_TRIGGER_START);
+            try {
+                holder.applyBuilder(this, holder.getBuilder(this));
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override

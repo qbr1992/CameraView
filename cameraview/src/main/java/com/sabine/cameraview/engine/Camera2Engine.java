@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -15,6 +16,7 @@ import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.location.Location;
 import android.media.Image;
@@ -56,6 +58,7 @@ import com.sabine.cameraview.engine.action.LogAction;
 import com.sabine.cameraview.engine.mappers.Camera2Mapper;
 import com.sabine.cameraview.engine.meter.MeterAction;
 import com.sabine.cameraview.engine.meter.MeterResetAction;
+import com.sabine.cameraview.engine.metering.Camera2MeteringTransform;
 import com.sabine.cameraview.engine.offset.Axis;
 import com.sabine.cameraview.engine.offset.Reference;
 import com.sabine.cameraview.engine.options.Camera2Options;
@@ -66,6 +69,7 @@ import com.sabine.cameraview.frame.ImageFrameManager;
 import com.sabine.cameraview.gesture.Gesture;
 import com.sabine.cameraview.internal.CropHelper;
 import com.sabine.cameraview.metering.MeteringRegions;
+import com.sabine.cameraview.metering.MeteringTransform;
 import com.sabine.cameraview.picture.Full2PictureRecorder;
 import com.sabine.cameraview.picture.Snapshot2PictureRecorder;
 import com.sabine.cameraview.preview.GlCameraPreview;
@@ -255,6 +259,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     private void applyRepeatingRequestBuilder(boolean checkStarted, int errorReason) {
         if ((getState() == CameraState.PREVIEW && !isChangingState()) || !checkStarted) {
             try {
+                LOG.e("applyBuilder:setRepeatingRequest", mRepeatingRequestBuilder.build().getKeys().toString());
                 mSession.setRepeatingRequest(mRepeatingRequestBuilder.build(),
                         mRepeatingRequestCallback, null);
             } catch (CameraAccessException e) {
@@ -709,7 +714,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                     // This SHOULD be a library error so we throw a RuntimeException.
                     String message = LOG.e("onConfigureFailed! Session", session);
-//                    throw new RuntimeException(message);
+                    throw new RuntimeException(message);
                 }
 
                 @Override
@@ -1135,7 +1140,8 @@ public class Camera2Engine extends CameraBaseEngine implements
 
     private void applyAllParameters(@NonNull CaptureRequest.Builder builder,
                                     @Nullable CaptureRequest.Builder oldBuilder) {
-        LOG.i("applyAllParameters:", "called for tag", builder.build().getTag());
+        LOG.i("···········applyAllParameters:", "called for tag", builder.build().getTag());
+        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
         builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
         applyDefaultFocus(builder);
         applyFlash(builder, Flash.OFF);
@@ -1173,6 +1179,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 new int[]{});
         List<Integer> modes = new ArrayList<>();
         for (int mode : modesArray) { modes.add(mode); }
+        LOG.e("applyDefaultFocus:", getMode(), ", modes:", modes.toString());
         if (getMode() == Mode.VIDEO &&
                 modes.contains(CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)) {
             if (mLastRepeatingResult != null) {
@@ -1476,26 +1483,45 @@ public class Camera2Engine extends CameraBaseEngine implements
                                       @NonNull final float[] bounds,
                                       @Nullable final PointF[] points,
                                       final boolean notify) {
-//        getOrchestrator().remove("reset AE");
-////        mRepeatingRequestBuilder
-////                .set(CaptureRequest.CONTROL_AE_LOCK, false);
-//        applyRepeatingRequestBuilder();
+        cancelAutoFocus();
+
         final float old = mExposureCorrectionValue;
         mExposureCorrectionValue = EVvalue;
         mExposureCorrectionTask = getOrchestrator().scheduleStateful(
                 "exposure correction (" + EVvalue + ")",
                 CameraState.ENGINE,
                 new Runnable() {
-            @Override
-            public void run() {
-                if (applyExposureCorrection(mRepeatingRequestBuilder, old)) {
-                    applyRepeatingRequestBuilder();
-                    if (notify) {
-                        getCallback().dispatchOnExposureCorrectionChanged(EVvalue, bounds, points);
+                    @Override
+                    public void run() {
+                        LOG.e("setExposureCorrection:", old, "EVvalue:", EVvalue);
+                        if (applyExposureCorrection(mRepeatingRequestBuilder, old)) {
+                            applyRepeatingRequestBuilder();
+                            if (notify) {
+                                getCallback().dispatchOnExposureCorrectionChanged(EVvalue, bounds, points);
+                            }
+                        }
                     }
-                }
-            }
-        });
+                });
+//        getOrchestrator().remove("reset AE");
+////        mRepeatingRequestBuilder
+////                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+//        applyRepeatingRequestBuilder();
+//        final float old = mExposureCorrectionValue;
+//        mExposureCorrectionValue = EVvalue;
+//        mExposureCorrectionTask = getOrchestrator().scheduleStateful(
+//                "exposure correction (" + EVvalue + ")",
+//                CameraState.ENGINE,
+//                new Runnable() {
+//            @Override
+//            public void run() {
+//                if (applyExposureCorrection(mRepeatingRequestBuilder, old)) {
+//                    applyRepeatingRequestBuilder();
+//                    if (notify) {
+//                        getCallback().dispatchOnExposureCorrectionChanged(EVvalue, bounds, points);
+//                    }
+//                }
+//            }
+//        });
 //        getOrchestrator().scheduleStatefulDelayed("reset AE",
 //                CameraState.PREVIEW,
 //                200,
@@ -1504,7 +1530,7 @@ public class Camera2Engine extends CameraBaseEngine implements
 //                    public void run() {
 ////                        mRepeatingRequestBuilder
 ////                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
-////                        applyDefaultFocus(mRepeatingRequestBuilder);
+//                        applyDefaultFocus(mRepeatingRequestBuilder);
 //                        applyRepeatingRequestBuilder();
 //                    }
 //                });
@@ -1513,6 +1539,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     @SuppressWarnings("WeakerAccess")
     protected boolean applyExposureCorrection(@NonNull CaptureRequest.Builder builder,
                                               float oldEVvalue) {
+        LOG.e("applyExposureCorrection:", oldEVvalue);
         if (mCameraOptions.isExposureCorrectionSupported()) {
             Rational exposureCorrectionStep = readCharacteristic(
                     CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP,
@@ -1688,6 +1715,63 @@ public class Camera2Engine extends CameraBaseEngine implements
         // This will only work when we have a preview, since it launches the preview
         // in the end. Even without this it would need the bind state at least,
         // since we need the preview size.
+        cancelAutoFocus();
+
+//        boolean has_focus = false;
+//        boolean has_metering = false;
+//        boolean has_whiteBalance = false;
+//        List<MeteringRectangle> areas = new ArrayList<>();
+//        if (regions != null) {
+//            MeteringTransform<MeteringRectangle> transform = new Camera2MeteringTransform(
+//                    getAngles(),
+//                    getPreview().getSurfaceSize(),
+//                    getPreviewStreamSize(Reference.VIEW),
+//                    getPreview().isCropping(),
+//                    mCameraCharacteristics,
+//                    mRepeatingRequestBuilder
+//            );
+//            MeteringRegions transformed = regions.transform(transform);
+//            areas = transformed.get(Integer.MAX_VALUE, transform);
+//        }
+//
+//        int maxRegionsAF = 0;
+//        if( !areas.isEmpty() && (maxRegionsAF = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF)) > 0 ) {
+//            has_focus = true;
+//            int max = Math.min(maxRegionsAF, areas.size());
+//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS,
+//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
+//        }
+//        int maxRegionsAE = 0;
+//        if( !areas.isEmpty() && (maxRegionsAE = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE)) > 0 ) {
+//            has_metering = true;
+//            int max = Math.min(maxRegionsAE, areas.size());
+//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS,
+//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
+//        }
+//        int maxRegionsAWB = 0;
+//        if (!areas.isEmpty() && (maxRegionsAWB = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AWB)) > 0) {
+//            has_whiteBalance = true;
+//            int max = Math.min(maxRegionsAWB, areas.size());
+//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AWB_REGIONS,
+//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
+//        }
+//        if( has_focus || has_metering || has_whiteBalance) {
+//            applyRepeatingRequestBuilder();
+//        }
+//
+//        if (supportsAutoFocus()) {
+//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE);
+//            applyRepeatingRequestBuilder();
+//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+//            if (getState() == CameraState.PREVIEW && !isChangingState()) {
+//                try {
+//                    mSession.capture(mRepeatingRequestBuilder.build(), mRepeatingRequestCallback, null);
+//                } catch (CameraAccessException e) {
+//                    e.printStackTrace();
+//                }
+//            }
+//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE); // ensure set back to idle
+//        }
         getOrchestrator().scheduleStateful("autofocus (" + gesture + ")",
                 CameraState.PREVIEW,
                 new Runnable() {
@@ -1725,6 +1809,45 @@ public class Camera2Engine extends CameraBaseEngine implements
         });
     }
 
+    @Override
+    public void cancelAutoFocus() {
+        LOG.i("cancelAutoFocus");
+
+        if( mCamera == null || mCameraCharacteristics == null || mSession == null) {
+            LOG.i("no camera or capture session");
+            return;
+        }
+
+        mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+        // Camera2Basic does a capture then sets a repeating request - do the same here just to be safe
+        try {
+            LOG.e("applyBuilder: kye=" + CaptureRequest.CONTROL_AF_TRIGGER + ", value=" + CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+            mSession.capture(mRepeatingRequestBuilder.build(), mRepeatingRequestCallback, null);
+        }
+        catch(CameraAccessException e) {
+            LOG.e("failed to cancel autofocus [capture]");
+            LOG.e("reason: " + e.getReason());
+            LOG.e("message: " + e.getMessage());
+
+            e.printStackTrace();
+        }
+        mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
+        LOG.e("applyRepeatingRequestBuilder: kye=" + CaptureRequest.CONTROL_AF_TRIGGER + ", value=" + CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
+        applyRepeatingRequestBuilder();
+    }
+
+    @Override
+    public boolean supportsAutoFocus() {
+        if( mRepeatingRequestBuilder == null )
+            return false;
+        Integer focus_mode = mRepeatingRequestBuilder.get(CaptureRequest.CONTROL_AF_MODE);
+        if( focus_mode == null )
+            return false;
+        if( focus_mode == CaptureRequest.CONTROL_AF_MODE_AUTO || focus_mode == CaptureRequest.CONTROL_AF_MODE_MACRO )
+            return true;
+        return false;
+    }
+
     @NonNull
     private MeterAction createMeterAction(@Nullable MeteringRegions regions) {
         // Before creating any new meter action, abort the old one.
@@ -1748,27 +1871,21 @@ public class Camera2Engine extends CameraBaseEngine implements
         Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
 //        Log.d("unlockAndResetMetering", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:" + aeMode);
         // Needs the PREVIEW state!
+        cancelAutoFocus();
+
         Actions.sequence(
                 new BaseAction() {
                     @Override
                     protected void onStart(@NonNull ActionHolder holder) {
                         super.onStart(holder);
-                        if (!SensorController.getInstance(getCallback().getContext()).isFocusLocked()) {
-//                            Log.d("onExposureCorrection", "unlockAndResetMetering");
-                            applyDefaultFocus(holder.getBuilder(this));
-                            // 解决部分低版本（Android6/7/8）手机点击屏幕后，无法恢复自动对焦问题（华为mate10 Android8仍存在该问题）
-                            // CONTROL_AF_STATE_ACTIVE_SCAN判断一次点击后，CONTROL_AF_STATE_PASSIVE_SCAN判断锁屏后
-                            if (afState == CONTROL_AF_STATE_ACTIVE_SCAN || afState == CONTROL_AF_STATE_PASSIVE_SCAN) {
-                                holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
-                                        CONTROL_AF_TRIGGER_CANCEL);
-                            }
-                            holder.getBuilder(this)
-                                    .set(CaptureRequest.CONTROL_AE_LOCK, false);
-                            holder.getBuilder(this)
-                                    .set(CaptureRequest.CONTROL_AWB_LOCK, false);
-                            holder.applyBuilder(this);
-                            setState(STATE_COMPLETED);
-                        }
+                        applyDefaultFocus(holder.getBuilder(this));
+
+                        holder.getBuilder(this)
+                                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+//                        holder.getBuilder(this)
+//                                .set(CaptureRequest.CONTROL_AWB_LOCK, false);
+                        holder.applyBuilder(this);
+                        setState(STATE_COMPLETED);
                         // TODO should wait results?
                     }
                 },
@@ -1927,6 +2044,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     public void applyBuilder(@NonNull Action source, @NonNull CaptureRequest.Builder builder)
             throws CameraAccessException {
         // Risky - would be better to ensure that thread is the engine one.
+        LOG.e("applyBuilder:capture", builder.build().getKeys().toString());
         if (getState() == CameraState.PREVIEW && !isChangingState()) {
             mSession.capture(builder.build(), mRepeatingRequestCallback, null);
         }

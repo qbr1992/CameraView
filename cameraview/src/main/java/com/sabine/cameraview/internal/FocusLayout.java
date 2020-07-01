@@ -354,15 +354,7 @@ public class FocusLayout extends View {
                     // 点击设置焦距和测光
 //                    focusAtPoints(event);
                     isShowExposure = true;
-                    if (mFocusListener != null) mFocusListener.onExposure(exposureProgress, new float[4], new PointF[1]);       // 会导致华为手机锁定对焦曝光
-//                    mCameraView.postDelayed(new Runnable() {
-//                        @Override
-//                        public void run() {
-//                            if (isAutoExploreFocus) {
-//                                ((Camera2Engine) mCameraView.getCameraEngine()).unlockExposure();       // 解除锁定曝光对焦
-//                            }
-//                        }
-//                    }, 3000);
+//                    if (mFocusListener != null) mFocusListener.onExposure(exposureProgress, new float[4], new PointF[1]);
                 }
                 /* 清空 */
                 pointerDown = false;

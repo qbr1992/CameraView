@@ -46,6 +46,35 @@ public class FocusReset extends BaseReset {
             changed = true;
         }
 
+        int maxRegionsAE = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE,
+                0);
+        if (area != null && maxRegionsAE > 0) {
+            holder.getBuilder(this).set(CaptureRequest.CONTROL_AE_REGIONS,
+                    new MeteringRectangle[]{area});
+        }
+
+//        // NOTE: precapture might not be supported, in which case I think it will be ignored.
+//        CaptureResult lastResultAE = holder.getLastResult(this);
+//        Integer triggerAE = lastResultAE == null ? null
+//                : lastResultAE.get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER);
+//        LOG.i("onStarted:", "last precapture trigger is", triggerAE);
+//        if (triggerAE != null && triggerAE == CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START) {
+//            LOG.i("onStarted:", "canceling precapture.");
+//            int newTrigger = Build.VERSION.SDK_INT >= 23
+//                    ? CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL
+//                    : CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE;
+//            holder.getBuilder(this).set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+//                    newTrigger);
+//        }
+//        holder.getBuilder(this).set(CaptureRequest.CONTROL_AE_LOCK, true);
+
+        int maxRegionsAWB = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AWB,
+                0);
+        if (area != null && maxRegionsAWB > 0) {
+            holder.getBuilder(this).set(CaptureRequest.CONTROL_AWB_REGIONS,
+                    new MeteringRectangle[]{area});
+        }
+
         if (changed) holder.applyBuilder(this);
         setState(STATE_COMPLETED);
     }

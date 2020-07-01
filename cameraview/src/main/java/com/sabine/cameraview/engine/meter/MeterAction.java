@@ -1,5 +1,6 @@
 package com.sabine.cameraview.engine.meter;
 
+import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.MeteringRectangle;
 import android.os.Build;
 
@@ -85,7 +86,8 @@ public class MeterAction extends ActionWrapper {
         BaseMeter ae = new ExposureMeter(areas, skipIfPossible);
         BaseMeter af = new FocusMeter(areas, skipIfPossible);
         BaseMeter awb = new WhiteBalanceMeter(areas, skipIfPossible);
-        meters = Arrays.asList(ae, af, awb);
-        action = Actions.together(ae, af, awb);
+
+        meters = Arrays.asList(af);
+        action = Actions.together(af);
     }
 }

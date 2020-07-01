@@ -719,6 +719,8 @@ public abstract class CameraEngine implements
     public abstract void startAutoFocus(@Nullable Gesture gesture,
                                         @NonNull MeteringRegions regions,
                                         @NonNull PointF legacyPoint);
+    public abstract void cancelAutoFocus();
+    public abstract boolean supportsAutoFocus();
 
     public abstract void setPlaySounds(boolean playSounds);
 
@@ -731,7 +733,7 @@ public abstract class CameraEngine implements
                                    @Nullable File file,
                                    @Nullable FileDescriptor fileDescriptor);
     public abstract void takeVideoSnapshot(@NonNull VideoResult.Stub stub, @NonNull File file, Size size, boolean isFlip);
-    public abstract void stopVideo();
+    public abstract void stopVideo(boolean isCameraShutdown);
 
     public abstract long getTimeStamp();
 

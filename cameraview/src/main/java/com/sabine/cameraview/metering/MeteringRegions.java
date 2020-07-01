@@ -59,7 +59,7 @@ public class MeteringRegions {
         float width = POINT_AREA * bounds.getWidth();
         float height = POINT_AREA * bounds.getHeight();
         RectF rectF = expand(point, width, height);
-        return fromArea(bounds, rectF, weight, true);
+        return fromArea(bounds, rectF, weight, false);
     }
 
     @NonNull
