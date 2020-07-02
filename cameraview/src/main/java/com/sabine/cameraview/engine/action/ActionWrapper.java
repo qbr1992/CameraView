@@ -46,7 +46,9 @@ public abstract class ActionWrapper extends BaseAction {
     @Override
     public void onCaptureStarted(@NonNull ActionHolder holder, @NonNull CaptureRequest request) {
         super.onCaptureStarted(holder, request);
-        getAction().onCaptureStarted(holder, request);
+        if (getAction() != null) {
+            getAction().onCaptureStarted(holder, request);
+        }
     }
 
     @Override
@@ -62,6 +64,8 @@ public abstract class ActionWrapper extends BaseAction {
                                    @NonNull CaptureRequest request,
                                    @NonNull TotalCaptureResult result) {
         super.onCaptureCompleted(holder, request, result);
-        getAction().onCaptureCompleted(holder, request, result);
+        if (getAction() != null) {
+            getAction().onCaptureCompleted(holder, request, result);
+        }
     }
 }

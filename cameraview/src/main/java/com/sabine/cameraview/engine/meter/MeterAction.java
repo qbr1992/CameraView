@@ -1,6 +1,5 @@
 package com.sabine.cameraview.engine.meter;
 
-import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.MeteringRectangle;
 import android.os.Build;
 
@@ -34,13 +33,16 @@ public class MeterAction extends ActionWrapper {
     private final MeteringRegions regions;
     private final CameraEngine engine;
     private final boolean skipIfPossible;
+    private MeteringRectangle[] mMeteringAreas;
 
     public MeterAction(@NonNull CameraEngine engine,
                        @Nullable MeteringRegions regions,
-                       boolean skipIfPossible) {
+                       boolean skipIfPossible,
+                       MeteringRectangle[] meteringAreas) {
         this.regions = regions;
         this.engine = engine;
         this.skipIfPossible = skipIfPossible;
+        this.mMeteringAreas = meteringAreas;
     }
 
     @NonNull
@@ -82,11 +84,16 @@ public class MeterAction extends ActionWrapper {
             MeteringRegions transformed = regions.transform(transform);
             areas = transformed.get(Integer.MAX_VALUE, transform);
         }
+        if (mMeteringAreas !=null && mMeteringAreas.length>0) {
+            areas.clear();
+            for (int i = 0; i < mMeteringAreas.length; i++) {
+                areas.add(mMeteringAreas[i]);
+            }
+        }
 
-        BaseMeter ae = new ExposureMeter(areas, skipIfPossible);
+//        BaseMeter ae = new ExposureMeter(areas, skipIfPossible);
         BaseMeter af = new FocusMeter(areas, skipIfPossible);
-        BaseMeter awb = new WhiteBalanceMeter(areas, skipIfPossible);
-
+//        BaseMeter awb = new WhiteBalanceMeter(areas, skipIfPossible);
         meters = Arrays.asList(af);
         action = Actions.together(af);
     }

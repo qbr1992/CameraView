@@ -1,6 +1,7 @@
 package com.sabine.cameraview.engine;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.PointF;
@@ -22,6 +23,8 @@ import android.location.Location;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Build;
+
+import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -58,7 +61,6 @@ import com.sabine.cameraview.engine.action.LogAction;
 import com.sabine.cameraview.engine.mappers.Camera2Mapper;
 import com.sabine.cameraview.engine.meter.MeterAction;
 import com.sabine.cameraview.engine.meter.MeterResetAction;
-import com.sabine.cameraview.engine.metering.Camera2MeteringTransform;
 import com.sabine.cameraview.engine.offset.Axis;
 import com.sabine.cameraview.engine.offset.Reference;
 import com.sabine.cameraview.engine.options.Camera2Options;
@@ -69,7 +71,6 @@ import com.sabine.cameraview.frame.ImageFrameManager;
 import com.sabine.cameraview.gesture.Gesture;
 import com.sabine.cameraview.internal.CropHelper;
 import com.sabine.cameraview.metering.MeteringRegions;
-import com.sabine.cameraview.metering.MeteringTransform;
 import com.sabine.cameraview.picture.Full2PictureRecorder;
 import com.sabine.cameraview.picture.Snapshot2PictureRecorder;
 import com.sabine.cameraview.preview.GlCameraPreview;
@@ -128,6 +129,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     private MeterAction mMeterAction;
     private String mWideCameraId;        // 广角cameraID
     private String mTeleCameraId;        // 长焦cameraID
+    private MeteringRectangle[] mMeteringAreas;      // 曝光/焦点区域
 
     public Camera2Engine(Callback callback) {
         super(callback);
@@ -259,7 +261,6 @@ public class Camera2Engine extends CameraBaseEngine implements
     private void applyRepeatingRequestBuilder(boolean checkStarted, int errorReason) {
         if ((getState() == CameraState.PREVIEW && !isChangingState()) || !checkStarted) {
             try {
-                LOG.e("applyBuilder:setRepeatingRequest", mRepeatingRequestBuilder.build().getKeys().toString());
                 mSession.setRepeatingRequest(mRepeatingRequestBuilder.build(),
                         mRepeatingRequestCallback, null);
             } catch (CameraAccessException e) {
@@ -1140,7 +1141,7 @@ public class Camera2Engine extends CameraBaseEngine implements
 
     private void applyAllParameters(@NonNull CaptureRequest.Builder builder,
                                     @Nullable CaptureRequest.Builder oldBuilder) {
-        LOG.i("···········applyAllParameters:", "called for tag", builder.build().getTag());
+        LOG.i("applyAllParameters:", "called for tag", builder.build().getTag());
         builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
         builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
         applyDefaultFocus(builder);
@@ -1179,7 +1180,6 @@ public class Camera2Engine extends CameraBaseEngine implements
                 new int[]{});
         List<Integer> modes = new ArrayList<>();
         for (int mode : modesArray) { modes.add(mode); }
-        LOG.e("applyDefaultFocus:", getMode(), ", modes:", modes.toString());
         if (getMode() == Mode.VIDEO &&
                 modes.contains(CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)) {
             if (mLastRepeatingResult != null) {
@@ -1483,6 +1483,10 @@ public class Camera2Engine extends CameraBaseEngine implements
                                       @NonNull final float[] bounds,
                                       @Nullable final PointF[] points,
                                       final boolean notify) {
+//        getOrchestrator().remove("reset AE");
+////        mRepeatingRequestBuilder
+////                .set(CaptureRequest.CONTROL_AE_LOCK, false);
+//        applyRepeatingRequestBuilder();
         cancelAutoFocus();
 
         final float old = mExposureCorrectionValue;
@@ -1491,37 +1495,16 @@ public class Camera2Engine extends CameraBaseEngine implements
                 "exposure correction (" + EVvalue + ")",
                 CameraState.ENGINE,
                 new Runnable() {
-                    @Override
-                    public void run() {
-                        LOG.e("setExposureCorrection:", old, "EVvalue:", EVvalue);
-                        if (applyExposureCorrection(mRepeatingRequestBuilder, old)) {
-                            applyRepeatingRequestBuilder();
-                            if (notify) {
-                                getCallback().dispatchOnExposureCorrectionChanged(EVvalue, bounds, points);
-                            }
-                        }
+            @Override
+            public void run() {
+                if (applyExposureCorrection(mRepeatingRequestBuilder, old)) {
+                    applyRepeatingRequestBuilder();
+                    if (notify) {
+                        getCallback().dispatchOnExposureCorrectionChanged(EVvalue, bounds, points);
                     }
-                });
-//        getOrchestrator().remove("reset AE");
-////        mRepeatingRequestBuilder
-////                .set(CaptureRequest.CONTROL_AE_LOCK, false);
-//        applyRepeatingRequestBuilder();
-//        final float old = mExposureCorrectionValue;
-//        mExposureCorrectionValue = EVvalue;
-//        mExposureCorrectionTask = getOrchestrator().scheduleStateful(
-//                "exposure correction (" + EVvalue + ")",
-//                CameraState.ENGINE,
-//                new Runnable() {
-//            @Override
-//            public void run() {
-//                if (applyExposureCorrection(mRepeatingRequestBuilder, old)) {
-//                    applyRepeatingRequestBuilder();
-//                    if (notify) {
-//                        getCallback().dispatchOnExposureCorrectionChanged(EVvalue, bounds, points);
-//                    }
-//                }
-//            }
-//        });
+                }
+            }
+        });
 //        getOrchestrator().scheduleStatefulDelayed("reset AE",
 //                CameraState.PREVIEW,
 //                200,
@@ -1530,7 +1513,7 @@ public class Camera2Engine extends CameraBaseEngine implements
 //                    public void run() {
 ////                        mRepeatingRequestBuilder
 ////                                .set(CaptureRequest.CONTROL_AE_LOCK, true);
-//                        applyDefaultFocus(mRepeatingRequestBuilder);
+////                        applyDefaultFocus(mRepeatingRequestBuilder);
 //                        applyRepeatingRequestBuilder();
 //                    }
 //                });
@@ -1539,7 +1522,6 @@ public class Camera2Engine extends CameraBaseEngine implements
     @SuppressWarnings("WeakerAccess")
     protected boolean applyExposureCorrection(@NonNull CaptureRequest.Builder builder,
                                               float oldEVvalue) {
-        LOG.e("applyExposureCorrection:", oldEVvalue);
         if (mCameraOptions.isExposureCorrectionSupported()) {
             Rational exposureCorrectionStep = readCharacteristic(
                     CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP,
@@ -1717,61 +1699,6 @@ public class Camera2Engine extends CameraBaseEngine implements
         // since we need the preview size.
         cancelAutoFocus();
 
-//        boolean has_focus = false;
-//        boolean has_metering = false;
-//        boolean has_whiteBalance = false;
-//        List<MeteringRectangle> areas = new ArrayList<>();
-//        if (regions != null) {
-//            MeteringTransform<MeteringRectangle> transform = new Camera2MeteringTransform(
-//                    getAngles(),
-//                    getPreview().getSurfaceSize(),
-//                    getPreviewStreamSize(Reference.VIEW),
-//                    getPreview().isCropping(),
-//                    mCameraCharacteristics,
-//                    mRepeatingRequestBuilder
-//            );
-//            MeteringRegions transformed = regions.transform(transform);
-//            areas = transformed.get(Integer.MAX_VALUE, transform);
-//        }
-//
-//        int maxRegionsAF = 0;
-//        if( !areas.isEmpty() && (maxRegionsAF = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF)) > 0 ) {
-//            has_focus = true;
-//            int max = Math.min(maxRegionsAF, areas.size());
-//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS,
-//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
-//        }
-//        int maxRegionsAE = 0;
-//        if( !areas.isEmpty() && (maxRegionsAE = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE)) > 0 ) {
-//            has_metering = true;
-//            int max = Math.min(maxRegionsAE, areas.size());
-//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS,
-//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
-//        }
-//        int maxRegionsAWB = 0;
-//        if (!areas.isEmpty() && (maxRegionsAWB = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AWB)) > 0) {
-//            has_whiteBalance = true;
-//            int max = Math.min(maxRegionsAWB, areas.size());
-//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AWB_REGIONS,
-//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
-//        }
-//        if( has_focus || has_metering || has_whiteBalance) {
-//            applyRepeatingRequestBuilder();
-//        }
-//
-//        if (supportsAutoFocus()) {
-//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE);
-//            applyRepeatingRequestBuilder();
-//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
-//            if (getState() == CameraState.PREVIEW && !isChangingState()) {
-//                try {
-//                    mSession.capture(mRepeatingRequestBuilder.build(), mRepeatingRequestCallback, null);
-//                } catch (CameraAccessException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//            mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE); // ensure set back to idle
-//        }
         getOrchestrator().scheduleStateful("autofocus (" + gesture + ")",
                 CameraState.PREVIEW,
                 new Runnable() {
@@ -1783,6 +1710,45 @@ public class Camera2Engine extends CameraBaseEngine implements
 
                 // Create the meter and start.
                 getCallback().dispatchOnFocusStart(gesture, legacyPoint);
+
+                // 重新计算曝光/焦点位置
+                float x = legacyPoint.x / mPreview.getView().getWidth();
+                float y = legacyPoint.y / mPreview.getView().getHeight();
+
+                switch (mFacing) {
+                    case FRONT: {
+                        float aux = x;
+                        x = 1 - y;
+                        y = 1 - aux;
+                    }
+                        break;
+                    default: {
+                        int displayRotation = ((Activity)getCallback().getContext()).getWindowManager().getDefaultDisplay().getRotation();
+                        switch (displayRotation) {
+                            case Surface.ROTATION_0:
+                                float aux = x;
+                                x = y;
+                                y = 1 - aux;
+                                break;
+                            case Surface.ROTATION_270:
+                                x = 1 - x;
+                                y = 1 - y;
+                                break;
+                            default:
+                        }
+                    }
+                        break;
+                }
+                // we assume the device supports at least one metering area.
+                mMeteringAreas = new MeteringRectangle[1];
+                Range<Float> activeRange = new Range<>(0.1f,0.9f);
+                x = activeRange.clamp(x);
+                y = activeRange.clamp(y);
+                RectF rect = new RectF(x - 0.1f, y - 0.1f, x + 0.1f, y + 0.1f);
+                Log.d(TAG, "onTouch: " + x + ":" + y);
+                Rect activeArraySize = mCameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+                mMeteringAreas[0] = convertRectToMeteringRectangle(rect, activeArraySize, 1000);
+
                 final MeterAction action = createMeterAction(regions);
                 Action wrapper = Actions.timeout(METER_TIMEOUT, action);
                 wrapper.start(Camera2Engine.this);
@@ -1812,12 +1778,10 @@ public class Camera2Engine extends CameraBaseEngine implements
     @Override
     public void cancelAutoFocus() {
         LOG.i("cancelAutoFocus");
-
         if( mCamera == null || mCameraCharacteristics == null || mSession == null) {
             LOG.i("no camera or capture session");
             return;
         }
-
         mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
         // Camera2Basic does a capture then sets a repeating request - do the same here just to be safe
         try {
@@ -1828,7 +1792,6 @@ public class Camera2Engine extends CameraBaseEngine implements
             LOG.e("failed to cancel autofocus [capture]");
             LOG.e("reason: " + e.getReason());
             LOG.e("message: " + e.getMessage());
-
             e.printStackTrace();
         }
         mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
@@ -1848,6 +1811,19 @@ public class Camera2Engine extends CameraBaseEngine implements
         return false;
     }
 
+    private static MeteringRectangle convertRectToMeteringRectangle(RectF rect, Rect activeArray, @IntRange(from=0,to=1000) int weight) {
+        // rect is of type [0, 0] - [1, 1] and we must convert it to [0, 0] - [sensor width-1, sensor height-1].
+        int left = (int)(rect.left * (activeArray.width()-1));
+        int right = (int)(rect.right * (activeArray.width()-1));
+        int top = (int)(rect.top * (activeArray.height()-1));
+        int bottom = (int)(rect.bottom * (activeArray.height()-1));
+        left = Math.min(left, activeArray.width()-1);
+        right = Math.min(right, activeArray.width()-1);
+        top = Math.min(top, activeArray.height()-1);
+        bottom = Math.min(bottom, activeArray.height()-1);
+        return new MeteringRectangle(new Rect(left, top, right, bottom), weight);
+    }
+
     @NonNull
     private MeterAction createMeterAction(@Nullable MeteringRegions regions) {
         // Before creating any new meter action, abort the old one.
@@ -1859,33 +1835,41 @@ public class Camera2Engine extends CameraBaseEngine implements
         // The last one is under our control because the library has no focus API.
         // So let's set a good af mode here. This operation is reverted during onMeteringReset().
         applyFocusForMetering(mRepeatingRequestBuilder);
-        mMeterAction = new MeterAction(Camera2Engine.this, regions, regions == null);
+        mMeterAction = new MeterAction(Camera2Engine.this, regions, regions == null, mMeteringAreas);
         return mMeterAction;
     }
 
     @EngineThread
     public void unlockAndResetMetering() {
-        final Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
-        Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
-        Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
-        Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
-//        Log.d("unlockAndResetMetering", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:" + aeMode);
-        // Needs the PREVIEW state!
         cancelAutoFocus();
 
+//        final Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
+//        Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
+//        Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
+//        Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
+//        Log.d("unlockAndResetMetering", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:" + aeMode);
+        // Needs the PREVIEW state!
         Actions.sequence(
                 new BaseAction() {
                     @Override
                     protected void onStart(@NonNull ActionHolder holder) {
                         super.onStart(holder);
-                        applyDefaultFocus(holder.getBuilder(this));
-
-                        holder.getBuilder(this)
-                                .set(CaptureRequest.CONTROL_AE_LOCK, false);
-//                        holder.getBuilder(this)
-//                                .set(CaptureRequest.CONTROL_AWB_LOCK, false);
-                        holder.applyBuilder(this);
-                        setState(STATE_COMPLETED);
+                        if (!SensorController.getInstance(getCallback().getContext()).isFocusLocked()) {
+//                            Log.d("onExposureCorrection", "unlockAndResetMetering");
+                            applyDefaultFocus(holder.getBuilder(this));
+//                            // 解决部分低版本（Android6/7/8）手机点击屏幕后，无法恢复自动对焦问题（华为mate10 Android8仍存在该问题）
+//                            // CONTROL_AF_STATE_ACTIVE_SCAN判断一次点击后，CONTROL_AF_STATE_PASSIVE_SCAN判断锁屏后
+//                            if (afState == CONTROL_AF_STATE_ACTIVE_SCAN || afState == CONTROL_AF_STATE_PASSIVE_SCAN) {
+//                                holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
+//                                        CONTROL_AF_TRIGGER_CANCEL);
+//                            }
+                            holder.getBuilder(this)
+                                    .set(CaptureRequest.CONTROL_AE_LOCK, false);
+                            holder.getBuilder(this)
+                                    .set(CaptureRequest.CONTROL_AWB_LOCK, false);
+                            holder.applyBuilder(this);
+                            setState(STATE_COMPLETED);
+                        }
                         // TODO should wait results?
                     }
                 },
@@ -2044,7 +2028,6 @@ public class Camera2Engine extends CameraBaseEngine implements
     public void applyBuilder(@NonNull Action source, @NonNull CaptureRequest.Builder builder)
             throws CameraAccessException {
         // Risky - would be better to ensure that thread is the engine one.
-        LOG.e("applyBuilder:capture", builder.build().getKeys().toString());
         if (getState() == CameraState.PREVIEW && !isChangingState()) {
             mSession.capture(builder.build(), mRepeatingRequestCallback, null);
         }

@@ -32,8 +32,9 @@ public class ExposureReset extends BaseReset {
         int maxRegions = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE,
                 0);
         if (area != null && maxRegions > 0) {
-            holder.getBuilder(this).set(CaptureRequest.CONTROL_AE_REGIONS,
-                    new MeteringRectangle[]{area});
+            // 注释掉，避免点击屏幕重新确定曝光/焦点位置后再次恢复到屏幕中间点
+//            holder.getBuilder(this).set(CaptureRequest.CONTROL_AE_REGIONS,
+//                    new MeteringRectangle[]{area});
         }
 
         // NOTE: precapture might not be supported, in which case I think it will be ignored.

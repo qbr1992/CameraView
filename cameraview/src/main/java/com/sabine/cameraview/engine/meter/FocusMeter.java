@@ -21,7 +21,6 @@ public class FocusMeter extends BaseMeter {
 
     private static final String TAG = FocusMeter.class.getSimpleName();
     private static final CameraLogger LOG = CameraLogger.create(TAG);
-    private boolean mSupportsAF;
 
     public FocusMeter(@NonNull List<MeteringRectangle> areas, boolean skipIfPossible) {
         super(areas, skipIfPossible);
@@ -31,14 +30,14 @@ public class FocusMeter extends BaseMeter {
     protected boolean checkIsSupported(@NonNull ActionHolder holder) {
         // Exclude OFF and EDOF as per docs. These do no support the trigger.
         Integer afMode = holder.getBuilder(this).get(CaptureRequest.CONTROL_AF_MODE);
-        mSupportsAF = afMode != null &&
+        boolean result = afMode != null &&
                 (afMode == CameraCharacteristics.CONTROL_AF_MODE_AUTO
                         || afMode == CameraCharacteristics.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                         || afMode == CameraCharacteristics.CONTROL_AF_MODE_CONTINUOUS_VIDEO
                         || afMode == CameraCharacteristics.CONTROL_AF_MODE_MACRO);
-        LOG.i("checkIsSupported:", mSupportsAF, afMode);
+        LOG.i("checkIsSupported:", result, afMode);
 
-        return mSupportsAF || checkIsSupportedAE(holder)/* || checkIsSupportedAWB(holder)*/;
+        return result || checkIsSupportedAE(holder) || checkIsSupportedAWB(holder);
     }
 
     private boolean checkIsSupportedAE(@NonNull ActionHolder holder) {
@@ -96,9 +95,11 @@ public class FocusMeter extends BaseMeter {
     protected void onStarted(@NonNull ActionHolder holder, @NonNull List<MeteringRectangle> areas) {
         LOG.i("onStarted:", "with areas:", areas);
 
+        boolean afTriggerStart = false;
         int maxRegions = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AF,
                 0);
         if (!areas.isEmpty() && maxRegions > 0) {
+            afTriggerStart = true;
             int max = Math.min(maxRegions, areas.size());
             holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_REGIONS,
                     areas.subList(0, max).toArray(new MeteringRectangle[]{}));
@@ -111,25 +112,15 @@ public class FocusMeter extends BaseMeter {
                     areas.subList(0, max).toArray(new MeteringRectangle[]{}));
         }
 
-//        int maxRegionsAWB = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AWB,
-//                0);
-//        if (!areas.isEmpty() && maxRegionsAWB > 0) {
-//            int max = Math.min(maxRegionsAWB, areas.size());
-//            holder.getBuilder(this).set(CaptureRequest.CONTROL_AWB_REGIONS,
-//                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
-//        }
+        int maxRegionsAWB = readCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AWB,
+                0);
+        if (!areas.isEmpty() && maxRegionsAWB > 0) {
+            int max = Math.min(maxRegionsAWB, areas.size());
+            holder.getBuilder(this).set(CaptureRequest.CONTROL_AWB_REGIONS,
+                    areas.subList(0, max).toArray(new MeteringRectangle[]{}));
+        }
         holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER, CameraCharacteristics.CONTROL_AF_TRIGGER_IDLE);
         holder.applyBuilder(this);
-
-        if (mSupportsAF) {
-            holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
-                    CaptureRequest.CONTROL_AF_TRIGGER_START);
-            try {
-                holder.applyBuilder(this, holder.getBuilder(this));
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     @Override
