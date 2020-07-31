@@ -1,6 +1,7 @@
 <component name="libraryTable">
   <library name="Gradle: com.otaliastudios.opengl:egloo:0.4.0@aar">
     <CLASSES>
+      <root url="file://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/abed3550e3c1fd356cb8378d6d518522/egloo-0.4.0/AndroidManifest.xml" />
       <root url="jar://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/abed3550e3c1fd356cb8378d6d518522/egloo-0.4.0/jars/classes.jar!/" />
       <root url="file://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/abed3550e3c1fd356cb8378d6d518522/egloo-0.4.0/res" />
     </CLASSES>

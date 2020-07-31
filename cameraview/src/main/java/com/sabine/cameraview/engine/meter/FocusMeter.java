@@ -121,6 +121,16 @@ public class FocusMeter extends BaseMeter {
         }
         holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER, CameraCharacteristics.CONTROL_AF_TRIGGER_IDLE);
         holder.applyBuilder(this);
+
+        if (afTriggerStart) {
+            holder.getBuilder(this).set(CaptureRequest.CONTROL_AF_TRIGGER,
+                    CaptureRequest.CONTROL_AF_TRIGGER_START);
+            try {
+                holder.applyBuilder(this, holder.getBuilder(this));
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override

@@ -222,13 +222,27 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
                 "isRecording:", isRecording(),
                 "thread:", Thread.currentThread(),
                 "- gl rendering.");
-        mDrawer.setTextureTransform(transform);
-        mDrawer.draw(frame.timestampUs());
+        if (mDrawer == null && mConfig != null) {
+            mDrawer = new GlTextureDrawer(mConfig.textureId);
+        }
+        if (mDrawer != null) {
+            mDrawer.setTextureTransform(transform);
+            mDrawer.draw(frame.timestampUs());
+        }
         if (mConfig.hasOverlay()) {
             mConfig.overlayDrawer.render(frame.timestampUs());
         }
-        mWindow.setPresentationTime(frame.timestampNanos);
-        mWindow.swapBuffers();
+        if (mEglCore == null) {
+            mEglCore = new EglCore(mConfig.eglContext, EglCore.FLAG_RECORDABLE);
+        }
+        if (mWindow == null && mEglCore != null && mSurface != null) {
+            mWindow = new EglWindowSurface(mEglCore, mSurface, true);
+            mWindow.makeCurrent();
+        }
+        if (mWindow != null) {
+            mWindow.setPresentationTime(frame.timestampNanos);
+            mWindow.swapBuffers();
+        }
         mFramePool.recycle(frame);
         LOG.i("onEvent -",
                 "frameNumber:", mFrameNumber,

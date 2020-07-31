@@ -25,22 +25,24 @@ public abstract class ActionWrapper extends BaseAction {
     @Override
     protected void onStart(@NonNull ActionHolder holder) {
         super.onStart(holder);
-        getAction().addCallback(new ActionCallback() {
-            @Override
-            public void onActionStateChanged(@NonNull Action action, int state) {
-                setState(state);
-                if (state == STATE_COMPLETED) {
-                    action.removeCallback(this);
+        if (getAction() != null) {
+            getAction().addCallback(new ActionCallback() {
+                @Override
+                public void onActionStateChanged(@NonNull Action action, int state) {
+                    setState(state);
+                    if (state == STATE_COMPLETED) {
+                        action.removeCallback(this);
+                    }
                 }
-            }
-        });
-        getAction().onStart(holder);
+            });
+            getAction().onStart(holder);
+        }
     }
 
     @Override
     protected void onAbort(@NonNull ActionHolder holder) {
         super.onAbort(holder);
-        getAction().onAbort(holder);
+        if (getAction() != null) getAction().onAbort(holder);
     }
 
     @Override
@@ -56,7 +58,7 @@ public abstract class ActionWrapper extends BaseAction {
                                     @NonNull CaptureRequest request,
                                     @NonNull CaptureResult result) {
         super.onCaptureProgressed(holder, request, result);
-        getAction().onCaptureProgressed(holder, request, result);
+        if (getAction() != null) getAction().onCaptureProgressed(holder, request, result);
     }
 
     @Override

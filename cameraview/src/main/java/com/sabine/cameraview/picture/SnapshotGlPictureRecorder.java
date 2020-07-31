@@ -118,7 +118,7 @@ public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
     @RendererThread
     @TargetApi(Build.VERSION_CODES.KITKAT)
     protected void onRendererFilterChanged(@NonNull Filter filter, float filterLevel) {
-        mTextureDrawer.setFilter(filter.copy());
+        if (mTextureDrawer != null) mTextureDrawer.setFilter(filter.copy());
     }
 
     @SuppressWarnings("WeakerAccess")

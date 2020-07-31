@@ -715,7 +715,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                     // This SHOULD be a library error so we throw a RuntimeException.
                     String message = LOG.e("onConfigureFailed! Session", session);
-                    throw new RuntimeException(message);
+//                    throw new RuntimeException(message);
                 }
 
                 @Override
@@ -1053,7 +1053,7 @@ public class Camera2Engine extends CameraBaseEngine implements
         }
         Rect outputCrop = CropHelper.computeCrop(outputSize, outputRatio);
         outputSize = new Size(outputCrop.width(), outputCrop.height());
-        stub.size = outputSize;
+//        stub.size = outputSize;
         stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
         stub.videoFrameRate = Math.round(mPreviewFrameRate);
         LOG.i("onTakeVideoSnapshot", "rotation:", stub.rotation, "size:", stub.size);
@@ -1923,30 +1923,32 @@ public class Camera2Engine extends CameraBaseEngine implements
                     @Override
                     protected void onStart(@NonNull final ActionHolder holder) {
                         super.onStart(holder);
-                        Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
-                        Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
-                        Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
-                        Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
-                        Log.d("lockFocus", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:");
-                        switch (afState) {
-                            // 0,6
-                            case CONTROL_AF_STATE_INACTIVE:
-                            case CONTROL_AF_STATE_PASSIVE_UNFOCUSED:
-                                mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
-                                        CaptureRequest.CONTROL_AF_TRIGGER_START);
-                                mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
-                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-                                break;
-                            // 2,3,4,5
-                            case CONTROL_AF_STATE_PASSIVE_FOCUSED:
-                            case CONTROL_AF_STATE_ACTIVE_SCAN:
-                            case CONTROL_AF_STATE_FOCUSED_LOCKED:
-                            case CONTROL_AF_STATE_NOT_FOCUSED_LOCKED:
-                                mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
-                                        CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
-                                break;
+                        if (mLastRepeatingResult != null) {
+                            Integer afState = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_STATE);
+                            Integer afMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AF_MODE);
+                            Integer mode = mLastRepeatingResult.get(CaptureResult.CONTROL_MODE);
+                            Integer aeMode = mLastRepeatingResult.get(CaptureResult.CONTROL_AE_MODE);
+                            Log.d("lockFocus", "afState:" + afState + ";afMode:" + afMode + ";mode:" + mode + ";aeMode:");
+                            switch (afState) {
+                                // 0,6
+                                case CONTROL_AF_STATE_INACTIVE:
+                                case CONTROL_AF_STATE_PASSIVE_UNFOCUSED:
+                                    mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+                                            CaptureRequest.CONTROL_AF_TRIGGER_START);
+                                    mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                                            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+                                    break;
+                                // 2,3,4,5
+                                case CONTROL_AF_STATE_PASSIVE_FOCUSED:
+                                case CONTROL_AF_STATE_ACTIVE_SCAN:
+                                case CONTROL_AF_STATE_FOCUSED_LOCKED:
+                                case CONTROL_AF_STATE_NOT_FOCUSED_LOCKED:
+                                    mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+                                            CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+                                    break;
+                            }
+                            applyRepeatingRequestBuilder();
                         }
-                        applyRepeatingRequestBuilder();
                     }
                 }
         ).start(Camera2Engine.this);

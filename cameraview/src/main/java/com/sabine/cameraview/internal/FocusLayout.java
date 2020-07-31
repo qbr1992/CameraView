@@ -486,9 +486,12 @@ public class FocusLayout extends View {
      * @return
      */
     private float distance(MotionEvent event) {
-        float dx = event.getX(1) - event.getX(0);
-        float dy = event.getY(1) - event.getY(0);
-        return (float) Math.sqrt(dx * dx + dy * dy);
+        if (event.getPointerCount() >= 2) {
+            float dx = event.getX(1) - event.getX(0);
+            float dy = event.getY(1) - event.getY(0);
+            return (float) Math.sqrt(dx * dx + dy * dy);
+        }
+        return 0;
     }
 
     public interface OnFocusListener {
