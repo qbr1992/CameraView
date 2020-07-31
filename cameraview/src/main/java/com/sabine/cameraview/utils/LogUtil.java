@@ -177,9 +177,11 @@ public class LogUtil {
 
     /**
      * 删除指定的日志文件
+     * @param day 要删除的截止日期(几天前)
      * */
-    public static void delFile() {// 删除日志文件
+    public static void delFile(int day) {// 删除日志文件
         // 取得日志存放目录
+        SDCARD_LOG_FILE_SAVE_DAYS = day;
         File baseDir = new File(getLogBasePath());
         if (baseDir.exists() && baseDir.isDirectory()) {
             String[] logPath = baseDir.list();
