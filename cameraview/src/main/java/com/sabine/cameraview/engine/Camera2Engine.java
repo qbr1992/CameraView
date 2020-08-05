@@ -1056,6 +1056,9 @@ public class Camera2Engine extends CameraBaseEngine implements
 //        stub.size = outputSize;
         stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
         stub.videoFrameRate = Math.round(mPreviewFrameRate);
+        if (stub.rotation == 90 || stub.rotation == 270) {
+            stub.size = stub.size.flip();
+        }
         LOG.i("onTakeVideoSnapshot", "rotation:", stub.rotation, "size:", stub.size);
         mVideoRecorder = new SnapshotVideoRecorder(this, glPreview, getOverlay());
         mVideoRecorder.start(stub);
