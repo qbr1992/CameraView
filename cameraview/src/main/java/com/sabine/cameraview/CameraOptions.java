@@ -21,10 +21,12 @@ import com.sabine.cameraview.gesture.GestureAction;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -52,6 +54,8 @@ public abstract class CameraOptions {
     protected boolean autoFocusSupported;
     protected float previewFrameRateMinValue;
     protected float previewFrameRateMaxValue;
+
+    protected List<Integer> previewFrameRateArray = new ArrayList<>();
 
     protected CameraOptions() { }
 
@@ -320,6 +324,15 @@ public abstract class CameraOptions {
      */
     public final float getPreviewFrameRateMaxValue() {
         return previewFrameRateMaxValue;
+    }
+
+    /**
+     * The array for the preview frame rate, in frames per second (FPS).
+     *
+     * @return the preview array
+     */
+    public final List<Integer> getPreviewFrameRateArray() {
+        return previewFrameRateArray;
     }
 
     @Override

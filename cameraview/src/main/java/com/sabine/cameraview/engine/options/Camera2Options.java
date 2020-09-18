@@ -9,7 +9,6 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.os.Build;
-import android.util.Log;
 import android.util.Range;
 import android.util.Rational;
 
@@ -178,14 +177,17 @@ public class Camera2Options extends CameraOptions {
         }
 
         // Preview FPS
+        previewFrameRateArray.clear();
         Range<Integer>[] range = cameraCharacteristics.get(CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
         if (range != null) {
             previewFrameRateMinValue = Float.MAX_VALUE;
             previewFrameRateMaxValue = -Float.MAX_VALUE;
             for (Range<Integer> fpsRange : range) {
-//                Log.e("aaa", "Camera2Options: fpsRange === " + fpsRange);
                 previewFrameRateMinValue = Math.min(previewFrameRateMinValue, fpsRange.getLower());
                 previewFrameRateMaxValue = Math.max(previewFrameRateMaxValue, fpsRange.getUpper());
+                if (fpsRange.getLower().equals(fpsRange.getUpper())) {
+                    previewFrameRateArray.add(fpsRange.getUpper());
+                }
             }
         } else {
             previewFrameRateMinValue = 0F;

@@ -1,5 +1,6 @@
 package com.sabine.cameraview.engine;
 
+import android.content.res.Configuration;
 import android.location.Location;
 import android.util.Log;
 
@@ -92,6 +93,8 @@ public abstract class CameraBaseEngine extends CameraEngine {
     boolean supportHighSpeed = false;
     boolean supportDuoCamera = false;
     boolean antishakeOn = false;
+
+    int mOritation = Configuration.ORIENTATION_PORTRAIT;
 
     // Ops used for testing.
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
@@ -610,7 +613,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
      */
     @Override
     public final void takeVideoSnapshot(@NonNull final VideoResult.Stub stub,
-                                        @NonNull final File file, @NonNull final Size size, final boolean isFlip) {
+                                        @NonNull final File file, @NonNull final Size size, final boolean isFlip, final int rotation) {
         getOrchestrator().scheduleStateful("take video snapshot", CameraState.BIND,
                 new Runnable() {
             @Override
@@ -633,14 +636,14 @@ public abstract class CameraBaseEngine extends CameraEngine {
                 }
                 //noinspection ConstantConditions
                 AspectRatio ratio = AspectRatio.of(getPreviewSurfaceSize(Reference.OUTPUT));
-                onTakeVideoSnapshot(stub, ratio);
+                onTakeVideoSnapshot(stub, ratio, rotation);
             }
         });
     }
 
     @Override
     public final void stopVideo(final boolean isCameraShutdown) {
-        LogUtil.w(TAG, "stopVideo");
+        LOG.w(TAG, "stopVideo");
         getOrchestrator().schedule("stop video", true, new Runnable() {
             @Override
             public void run() {
@@ -654,7 +657,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @EngineThread
     @SuppressWarnings("WeakerAccess")
     protected void onStopVideo(boolean isCameraShutdown) {
-        LogUtil.w(TAG, "onStopVideo");
+        LOG.w(TAG, "onStopVideo");
         if (mVideoRecorder != null) {
             mVideoRecorder.stop(isCameraShutdown);
             // Do not null this, so we respond correctly to isTakingVideo(),
@@ -701,7 +704,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
 
     @EngineThread
     protected abstract void onTakeVideoSnapshot(@NonNull VideoResult.Stub stub,
-                                                @NonNull AspectRatio outputRatio);
+                                                @NonNull AspectRatio outputRatio, int rotation);
 
     @EngineThread
     protected abstract void onTakeVideo(@NonNull VideoResult.Stub stub);
@@ -842,7 +845,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     protected final Size computeCaptureSize(@NonNull Mode mode) {
         // We want to pass stuff into the REF_VIEW reference, not the sensor one.
         // This is already managed by CameraOptions, so we just flip again at the end.
-        boolean flip = getAngles().flip(Reference.SENSOR, Reference.VIEW);
+        boolean flip = true;
         Size result;
         Collection<Size> sizes;
         if (mode == Mode.PICTURE) {
@@ -859,7 +862,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
 //            throw new RuntimeException("SizeSelectors must not return Sizes other than " +
 //                    "those in the input list.");
 //        }
-        LOG.e("computeCaptureSize:", "result:", result, "flip:", flip, "mode:", mode);
+        LOG.e("computeCaptureSize:", "computePreviewStreamSize result:", result, "flip:", flip, "mode:", mode);
         if (flip) result = result.flip(); // Go back to REF_SENSOR
         return result;
     }
@@ -881,7 +884,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
         @NonNull List<Size> previewSizes = getPreviewStreamAvailableSizes();
         // These sizes come in REF_SENSOR. Since there is an external selector involved,
         // we must convert all of them to REF_VIEW, then flip back when returning.
-        boolean flip = getAngles().flip(Reference.SENSOR, Reference.VIEW);
+        boolean flip = true;
         List<Size> sizes = new ArrayList<>(previewSizes.size());
         for (Size size : previewSizes) {
             Log.e(TAG, "computePreviewStreamSize: " + size);
@@ -992,8 +995,18 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
+    public void setOrientation(int orientation) {
+        mOritation = orientation;
+    }
+
+    @Override
     public void putAudioPcm(byte[] pcm, int length, boolean isEndOfStream) {
         if (mVideoRecorder != null) mVideoRecorder.putAudioPcm(pcm, length, isEndOfStream);
+    }
+
+    @Override
+    public List<Integer> getSupportPreviewFramerate() {
+        return mCameraOptions.getPreviewFrameRateArray();
     }
 
     //endregion

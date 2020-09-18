@@ -62,6 +62,11 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
         public long timestampNanos;
 
         /**
+         * Rotation-degrees
+         */
+        public int drawRotation;
+
+        /**
          * Milliseconds in the {@link System#currentTimeMillis()} reference.
          * This is actually needed/read only for the first frame.
          */
@@ -203,7 +208,7 @@ public class TextureMediaEncoder extends VideoMediaEncoder<TextureConfig> {
         // rotation at the moment. Rotation also takes place with respect to the origin
         // (the Z axis), so we must translate to origin, rotate, then back to where we were.
         Matrix.translateM(transform, 0, 0.5F, 0.5F, 0);
-        Matrix.rotateM(transform, 0, mTransformRotation, 0, 0, 1);
+        Matrix.rotateM(transform, 0, frame.drawRotation, 0, 0, 1);
         Matrix.translateM(transform, 0, -0.5F, -0.5F, 0);
 
         // 3. Do the same for overlays with their own rotation.

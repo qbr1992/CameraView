@@ -84,8 +84,10 @@
         </attr>
 
         <attr name="cameraFacing" format="enum">
-            <enum name="back" value="0" />
-            <enum name="front" value="1" />
+            <enum name="back_normal" value="0" />
+            <enum name="back_tele" value="1" />
+            <enum name="back_wide" value="2" />
+            <enum name="front" value="3" />
         </attr>
 
         <attr name="cameraHdr" format="enum">

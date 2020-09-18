@@ -3,6 +3,7 @@ package com.sabine.cameraview.engine;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.ImageFormat;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -70,6 +71,7 @@ import com.sabine.cameraview.frame.FrameManager;
 import com.sabine.cameraview.frame.ImageFrameManager;
 import com.sabine.cameraview.gesture.Gesture;
 import com.sabine.cameraview.internal.CropHelper;
+import com.sabine.cameraview.internal.OrientationHelper;
 import com.sabine.cameraview.metering.MeteringRegions;
 import com.sabine.cameraview.picture.Full2PictureRecorder;
 import com.sabine.cameraview.picture.Snapshot2PictureRecorder;
@@ -77,7 +79,6 @@ import com.sabine.cameraview.preview.GlCameraPreview;
 import com.sabine.cameraview.preview.RendererCameraPreview;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
-import com.sabine.cameraview.utils.LogUtil;
 import com.sabine.cameraview.video.Full2VideoRecorder;
 import com.sabine.cameraview.video.SnapshotVideoRecorder;
 
@@ -374,7 +375,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     @Override
     protected final boolean collectCameraInfo(@NonNull Facing facing) {
         int internalFacing = mMapper.mapFacing(facing);     // 长焦/广角/后置映射为后置相机，前置相机映射为前置相机
-        LogUtil.e(TAG, "collectCameraInfo: facing = " + facing + ", internalFacing = " + internalFacing);
+        LOG.e(TAG, "collectCameraInfo: facing = " + facing + ", internalFacing = " + internalFacing);
         String[] cameraIds = null;
         try {
             cameraIds = mManager.getCameraIdList();
@@ -387,8 +388,20 @@ public class Camera2Engine extends CameraBaseEngine implements
         LOG.i(TAG, "Facing:", facing,
                 "Internal:", internalFacing,
                 "Cameras:", cameraIds.length);
+        int backCameraIds = 0;
+        for (String cameraId : cameraIds) {
+            try {
+                CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
+                if (LENS_FACING_BACK == readCharacteristic(characteristics,
+                        CameraCharacteristics.LENS_FACING, -99)) {
+                    backCameraIds++;
+                }
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
         // Android版本大于28，避免低版本api支持不规范完整问题
-        if (cameraIds.length>=4 && android.os.Build.VERSION.SDK_INT>=android.os.Build.VERSION_CODES.P) {
+        if (backCameraIds>=4 && android.os.Build.VERSION.SDK_INT>=android.os.Build.VERSION_CODES.P) {
             supportDuoCamera = true;
         }
         for (String cameraId : cameraIds) {
@@ -410,6 +423,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                                     mCameraId = getTeleCameraId(cameraIds);
                                     break;
                             }
+                            if (mCameraId == null) mCameraId = cameraIds[0];
                         } else {
                             mCameraId = cameraId;
                         }
@@ -477,6 +491,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 }
             }
         }
+        Log.e(TAG, "getWideCameraId: " + mWideCameraId);
         return mWideCameraId;
     }
 
@@ -566,14 +581,15 @@ public class Camera2Engine extends CameraBaseEngine implements
                     // Not sure if this is called INSTEAD of onOpened() or can be called after
                     // as well. Cover both cases with an unrecoverable exception so that the
                     // engine is properly destroyed.
-                    CameraException exception
-                            = new CameraException(CameraException.REASON_DISCONNECTED);
-                    if (!task.getTask().isComplete()) {
-                        task.trySetException(exception);
-                    } else {
-                        LOG.i("CameraDevice.StateCallback reported disconnection.");
-                        throw exception;
-                    }
+//                    CameraException exception
+//                            = new CameraException(CameraException.REASON_DISCONNECTED);
+//                    if (!task.getTask().isComplete()) {
+//                        task.trySetException(exception);
+//                    } else {
+//                        LOG.i("CameraDevice.StateCallback reported disconnection.");
+//                        throw exception;
+//                    }
+                    getCallback().dispatchOnCameraClosed();
                 }
 
                 @Override
@@ -637,6 +653,11 @@ public class Camera2Engine extends CameraBaseEngine implements
             }
             mPreviewStreamSurface = ((SurfaceHolder) output).getSurface();
         } else if (outputClass == SurfaceTexture.class) {
+            if (output == null) {
+                LOG.e(TAG, "output == null");
+                getCallback().dispatchOnCameraClosed();
+                return task.getTask();
+            }
             ((SurfaceTexture) output).setDefaultBufferSize(
                     mPreviewStreamSize.getWidth(),
                     mPreviewStreamSize.getHeight());
@@ -926,7 +947,7 @@ public class Camera2Engine extends CameraBaseEngine implements
             // stub.size is not the real size: it will be cropped to the given ratio
             // stub.rotation will be set to 0 - we rotate the texture instead.
             stub.size = getUncroppedSnapshotSize(Reference.OUTPUT);
-            stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
+//            stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
             mPictureRecorder = new Snapshot2PictureRecorder(stub, this,
                     (RendererCameraPreview) mPreview, outputRatio);
             mPictureRecorder.take();
@@ -1042,7 +1063,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     @EngineThread
     @Override
     protected void onTakeVideoSnapshot(@NonNull VideoResult.Stub stub,
-                                       @NonNull AspectRatio outputRatio) {
+                                       @NonNull AspectRatio outputRatio, int rotation) {
         if (!(mPreview instanceof GlCameraPreview)) {
             throw new IllegalStateException("Video snapshots are only supported with GL_SURFACE.");
         }
@@ -1053,10 +1074,11 @@ public class Camera2Engine extends CameraBaseEngine implements
         }
         Rect outputCrop = CropHelper.computeCrop(outputSize, outputRatio);
         outputSize = new Size(outputCrop.width(), outputCrop.height());
-//        stub.size = outputSize;
-        stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
+//        stub.size = outputSize; //mate10手机滤镜设置分辨率不对会崩溃，所以严格按照支持的尺寸设置
+        stub.rotation = rotation;
+        stub.deviceRotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
         stub.videoFrameRate = Math.round(mPreviewFrameRate);
-        if (stub.rotation == 90 || stub.rotation == 270) {
+        if (mOritation == Configuration.ORIENTATION_LANDSCAPE) {
             stub.size = stub.size.flip();
         }
         LOG.i("onTakeVideoSnapshot", "rotation:", stub.rotation, "size:", stub.size);
@@ -1789,7 +1811,7 @@ public class Camera2Engine extends CameraBaseEngine implements
         // Camera2Basic does a capture then sets a repeating request - do the same here just to be safe
         try {
             LOG.e("applyBuilder: kye=" + CaptureRequest.CONTROL_AF_TRIGGER + ", value=" + CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
-            mSession.capture(mRepeatingRequestBuilder.build(), mRepeatingRequestCallback, null);
+            if (mSession != null) mSession.capture(mRepeatingRequestBuilder.build(), mRepeatingRequestCallback, null);
         }
         catch(CameraAccessException e) {
             LOG.e("failed to cancel autofocus [capture]");

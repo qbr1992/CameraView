@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -25,6 +26,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -57,6 +59,7 @@ import com.sabine.cameraview.engine.orchestrator.CameraState;
 import com.sabine.cameraview.filter.Filter;
 import com.sabine.cameraview.filter.FilterParser;
 import com.sabine.cameraview.filter.Filters;
+import com.sabine.cameraview.filter.MultiFilter;
 import com.sabine.cameraview.filter.NoFilter;
 import com.sabine.cameraview.filter.OneParameterFilter;
 import com.sabine.cameraview.filter.TwoParameterFilter;
@@ -281,7 +284,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
         // Apply camera engine params
         // Adding new ones? See setEngine().
-        setFacing(controls.getFacing());
+//        setFacing(controls.getFacing());
         setFlash(controls.getFlash());
         setMode(controls.getMode());
         setWhiteBalance(controls.getWhiteBalance());
@@ -932,7 +935,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         if (control instanceof Audio) {
             setAudio((Audio) control);
         } else if (control instanceof Facing) {
-            setFacing((Facing) control);
+//            setFacing((Facing) control);
         } else if (control instanceof Flash) {
             setFlash((Flash) control);
         } else if (control instanceof Grid) {
@@ -1046,7 +1049,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         if (mCameraPreview != null) mCameraEngine.setPreview(mCameraPreview);
 
         // Set again all parameters
-        setFacing(oldEngine.getFacing());
+//        setFacing(oldEngine.getFacing());
         setFlash(oldEngine.getFlash());
         setMode(oldEngine.getMode());
         setWhiteBalance(oldEngine.getWhiteBalance());
@@ -1620,7 +1623,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     /**
      * Sets the bit rate in bits per second for video capturing.
-     * Will be used by both {@link #takeVideo(File)} and {@link #takeVideoSnapshot(File, Size, boolean)}.
+     * Will be used by both {@link #takeVideo(File)} and {@link #takeVideoSnapshot(File, Size, boolean, int)}.
      *
      * @param bitRate desired bit rate
      */
@@ -1696,7 +1699,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     /**
      * Sets the bit rate in bits per second for audio capturing.
-     * Will be used by both {@link #takeVideo(File)} and {@link #takeVideoSnapshot(File, Size, boolean)}.
+     * Will be used by both {@link #takeVideo(File)} and {@link #takeVideoSnapshot(File, Size, boolean, int)}.
      *
      * @param bitRate desired bit rate
      */
@@ -1767,17 +1770,22 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         mCameraEngine.takePictureSnapshot(stub);
     }
 
+    private int mRotation = 0;
+    public void setDeviceRotation(int rotation) {
+//        mRotation = rotation;
+    }
+
     private boolean isStarted = false;
     public void startRecordVideo(@NonNull final File file, final Size size) {
-        int rotation = mCameraEngine.getAngles().offset(Reference.BASE, Reference.OUTPUT, Axis.ABSOLUTE);
+        final int rotation = mCameraEngine.getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
         mCountDownLayout.startDraw(new CountDownLayout.CountDownListener() {
             @Override
             public void countdownOver() {
-                if (mCameraEngine.getFacing() == Facing.FRONT) takeVideoSnapshot(file, size, flip);
-                else takeVideoSnapshot(file, size, false);
+                if (mCameraEngine.getFacing() == Facing.FRONT) takeVideoSnapshot(file, size, flip, rotation);
+                else takeVideoSnapshot(file, size, false, rotation);
                 isStarted = true;
             }
-        }, rotation);
+        }, mOrientation);
     }
 
     public void endRecordVideo(boolean isPause) {
@@ -1795,6 +1803,12 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
             }
         }
         mCountDownLayout.setIndex(3);
+    }
+
+    private int mOrientation = Configuration.ORIENTATION_PORTRAIT;
+    public void setOrientation(int orientation) {
+        mOrientation = orientation;
+        if (mCameraEngine != null) mCameraEngine.setOrientation(orientation);
     }
 
     public void setOpenCamera(boolean openCamera) {
@@ -1873,9 +1887,9 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      *
      * @param file a file where the video will be saved
      */
-    public void takeVideoSnapshot(@NonNull File file, @NonNull Size size, boolean isFlip) {
+    public void takeVideoSnapshot(@NonNull File file, @NonNull Size size, boolean isFlip, int rotation) {
         VideoResult.Stub stub = new VideoResult.Stub();
-        mCameraEngine.takeVideoSnapshot(stub, file, size, isFlip);
+        mCameraEngine.takeVideoSnapshot(stub, file, size, isFlip, rotation);
     }
 
     // TODO: pauseVideo and resumeVideo? There is mediarecorder.pause(), but API 24...
@@ -1890,7 +1904,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     /**
      * Sets the max width for snapshots taken with {@link #takePictureSnapshot()} or
-     * {@link #takeVideoSnapshot(File, Size, boolean)}. If the snapshot width exceeds this value, the snapshot
+     * {@link #takeVideoSnapshot(File, Size, boolean, int)}. If the snapshot width exceeds this value, the snapshot
      * will be scaled down to match this constraint.
      *
      * @param maxWidth max width for snapshots
@@ -1901,7 +1915,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     /**
      * Sets the max height for snapshots taken with {@link #takePictureSnapshot()} or
-     * {@link #takeVideoSnapshot(File, Size, boolean)}. If the snapshot height exceeds this value, the snapshot
+     * {@link #takeVideoSnapshot(File, Size, boolean, int)}. If the snapshot height exceeds this value, the snapshot
      * will be scaled down to match this constraint.
      *
      * @param maxHeight max height for snapshots
@@ -2200,8 +2214,8 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                     if (mTakePictureCallback != null && result.getData().length > 0) {
                         Bitmap bitmap = BitmapFactory.decodeByteArray(result.getData(), 0, result.getData().length);
                         Matrix matrix = new Matrix();
-                        if (getCameraRotation() == 0 || getCameraRotation() == 180) matrix.postRotate(getCameraRotation() + 90);
-                        if (getCameraRotation() == 90) matrix.postRotate(180);
+//                        if (getCameraRotation() == 0 || getCameraRotation() == 180) matrix.postRotate(getCameraRotation() + 90);
+//                        if (getCameraRotation() == 90) matrix.postRotate(180);
                         bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
                         mTakePictureCallback.takePictureOK(bitmap);
                     }
@@ -2313,13 +2327,20 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         @Override
         public void onDisplayOffsetChanged(int displayOffset, boolean willRecreate) {
             LOG.i("onDisplayOffsetChanged", displayOffset, "recreate:", willRecreate);
-            if (isOpened() && !willRecreate) {
+            if (!willRecreate) {
                 // Display offset changes when the device rotation lock is off and the activity
                 // is free to rotate. However, some changes will NOT recreate the activity, namely
                 // 180 degrees flips. In this case, we must restart the camera manually.
                 LOG.w("onDisplayOffsetChanged", "restarting the camera.");
-                close();
-                open();
+                if (!isStarted) {
+                    if (isOpened()) close();
+                    open();
+                } else {
+                    mCameraEngine.getAngles().setDisplayOffset(mOrientationHelper.getLastDisplayOffset());
+                    if (mCameraEngine.getPreview() != null) {
+                        mCameraEngine.getPreview().setDrawRotation(mCameraEngine.getAngles().offset(Reference.BASE, Reference.VIEW, Axis.ABSOLUTE));
+                    }
+                }
             }
         }
 
@@ -2381,7 +2402,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
         @Override
         public void dispatchError(final CameraException exception) {
-            LOG.i("dispatchError", exception);
+            LOG.i(TAG, "dispatchError exception : " + exception);
             mUiHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -2645,7 +2666,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      *
      * The filter will be applied to any picture snapshot taken with
      * {@link #takePictureSnapshot()} and any video snapshot taken with
-     * {@link #takeVideoSnapshot(File, Size, boolean)}.
+     * {@link #takeVideoSnapshot(File, Size, boolean, int)}.
      *
      * Use {@link NoFilter} to clear the existing filter,
      * and take a look at the {@link Filters} class for commonly used filters.
@@ -2657,6 +2678,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * @param filter a new filter
      */
     public void setFilter(@NonNull Filter filter) {
+        if (!(filter instanceof MultiFilter)) return;
         if (mCameraPreview == null) {
             mPendingFilter = filter;
         } else {
@@ -2718,6 +2740,11 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         if (mCameraEngine == null) return 0;
         return mCameraEngine.getAngles().offset(Reference.SENSOR, Reference.OUTPUT,
                 Axis.RELATIVE_TO_SENSOR);
+    }
+
+    public List<Integer> getSupportPreviewFramerate() {
+        if (mCameraEngine != null) return mCameraEngine.getSupportPreviewFramerate();
+        return null;
     }
 
     //endregion

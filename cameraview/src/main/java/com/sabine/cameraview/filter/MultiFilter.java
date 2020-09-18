@@ -6,7 +6,10 @@ import android.opengl.GLES20;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
+import com.sabine.cameraview.filters.BeautyAdjustV1Filter;
 import com.sabine.cameraview.filters.BeautyFilter;
+import com.sabine.cameraview.filters.BeautyV1Filter;
+import com.sabine.cameraview.filters.GaussianPassFilter;
 import com.sabine.cameraview.size.Size;
 import com.otaliastudios.opengl.core.Egloo;
 import com.otaliastudios.opengl.program.GlProgram;
@@ -61,6 +64,9 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
     private Size size = null;
     private float parameter1 = 0F;
     private float parameter2 = 0F;
+
+    private GlTexture inputImageTexture0;
+    private static String TAG = MultiFilter.class.getSimpleName();
 
     /**
      * Creates a new group with the given filters.
@@ -218,6 +224,11 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
                 Filter filter = filters.get(i);
                 State state = states.get(filter);
 
+//                if (filter instanceof BeautyV1Filter) {
+//                    ((BeautyV1Filter) filter).draw(timestampUs, transformMatrix, isFirst, isLast);
+//                    continue;
+//                }
+
                 maybeSetSize(filter);
                 maybeCreateProgram(filter, isFirst, isLast);
                 maybeCreateFramebuffer(filter, isFirst, isLast);
@@ -225,6 +236,7 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
                 //noinspection ConstantConditions
                 GLES20.glUseProgram(state.programHandle);
 
+                GLES20.glViewport(0, 0, state.size.getWidth(), state.size.getHeight());
                 // Define the output framebuffer.
                 // Each filter outputs into its own framebuffer object, except the
                 // last filter, which outputs into the default framebuffer.
@@ -248,7 +260,20 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
                 // It is the framebuffer texture from this cycle. If this is the last
                 // filter, reset this value just to cleanup.
                 if (!isLast) {
-                    state.outputTexture.bind();
+//                    state.outputTexture.bind();
+//                    if (filters.get(i+1) instanceof BeautyV1Filter) {
+//                        filters.get(i+1).setInputImageTexture0(state.outputTexture);
+//                    }
+
+                    if (filters.get(i+1) instanceof BeautyAdjustV1Filter && inputImageTexture0 != null) {
+                        ((BeautyAdjustV1Filter)filters.get(i+1)).setBlurTexture(state.outputTexture.getId());
+                        inputImageTexture0.bind();
+                    } else {
+                        if (filter instanceof NoFilter) {
+                            inputImageTexture0 = state.outputTexture;
+                        }
+                        state.outputTexture.bind();
+                    }
                 } else {
                     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
                     GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
@@ -264,14 +289,68 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
     public Filter copy() {
         synchronized (lock) {
             MultiFilter copy = new MultiFilter();
+//            if (size != null) {
+//                copy.setSize(size.getWidth(), size.getHeight());
+//            }
+            for (Filter filter : filters) {
+                if (filter instanceof GaussianPassFilter) {
+                    GaussianPassFilter oldFilter = (GaussianPassFilter) filter;
+                    GaussianPassFilter gaussianPassFilter = (GaussianPassFilter) filter.copy();
+                    gaussianPassFilter.setFilterOrientation(oldFilter.getFilterOrientation());
+                    copy.addFilter(gaussianPassFilter);
+                } else if (filter instanceof BeautyAdjustV1Filter) {
+                    BeautyAdjustV1Filter beautyAdjustV1Filter = (BeautyAdjustV1Filter) filter.copy();
+                    beautyAdjustV1Filter.setLutTexture(((BeautyAdjustV1Filter)filter).getLutTexture());
+                    copy.addFilter(beautyAdjustV1Filter);
+                } else {
+                    copy.addFilter(filter.copy());
+                }
+            }
             if (size != null) {
                 copy.setSize(size.getWidth(), size.getHeight());
             }
+            return copy;
+        }
+    }
+
+    public Filter copyBeautyFilter() {
+        synchronized (lock) {
+            MultiFilter copy = new MultiFilter();
+//            if (size != null) {
+//                copy.setSize(size.getWidth(), size.getHeight());
+//            }
             for (Filter filter : filters) {
-                copy.addFilter(filter.copy());
+                if (filter instanceof GaussianPassFilter) {
+                    GaussianPassFilter oldFilter = (GaussianPassFilter) filter;
+                    GaussianPassFilter gaussianPassFilter = (GaussianPassFilter) filter.copy();
+                    gaussianPassFilter.setFilterOrientation(oldFilter.getFilterOrientation());
+                    copy.addFilter(gaussianPassFilter);
+                } else if (filter instanceof BeautyAdjustV1Filter) {
+                    BeautyAdjustV1Filter beautyAdjustV1Filter = (BeautyAdjustV1Filter) filter.copy();
+                    beautyAdjustV1Filter.setLutTexture(((BeautyAdjustV1Filter)filter).getLutTexture());
+                    copy.addFilter(beautyAdjustV1Filter);
+                } else if (filter instanceof NoFilter) {
+                    copy.addFilter(filter.copy());
+                }
+            }
+            if (size != null) {
+                copy.setSize(size.getWidth(), size.getHeight());
             }
             return copy;
         }
+    }
+
+    @Override
+    public void setInputImageTexture0(GlTexture glTexture) {
+//        inputImageTexture0 = glTexture;
+//        synchronized (lock) {
+//            for (Filter filter : filters) {
+//                if (filter instanceof BeautyV1Filter) {
+//                    filter.setInputImageTexture0(glTexture);
+//                    break;
+//                }
+//            }
+//        }
     }
 
     @Override
@@ -312,10 +391,18 @@ public class MultiFilter implements Filter, OneParameterFilter, TwoParameterFilt
      * 获取美颜滤镜
      * @return
      */
-    public BeautyFilter getBeautyFilter() {
+//    public BeautyV1Filter getBeautyFilter() {
+//        for (Filter filter : filters) {
+//            if (filter instanceof BeautyV1Filter) {
+//                return (BeautyV1Filter) filter;
+//            }
+//        }
+//        return null;
+//    }
+    public BeautyAdjustV1Filter getBeautyFilter() {
         for (Filter filter : filters) {
-            if (filter instanceof BeautyFilter) {
-                return (BeautyFilter) filter;
+            if (filter instanceof BeautyAdjustV1Filter) {
+                return (BeautyAdjustV1Filter) filter;
             }
         }
         return null;

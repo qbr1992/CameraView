@@ -46,6 +46,7 @@ import com.sabine.cameraview.video.VideoRecorder;
 
 import java.io.File;
 import java.io.FileDescriptor;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -702,6 +703,7 @@ public abstract class CameraEngine implements
     public abstract boolean getPreviewFrameRateExact();
     public abstract void setPreviewFrameRate(float previewFrameRate);
     public abstract boolean supportHighSpeed();
+    public abstract List<Integer> getSupportPreviewFramerate();
     public abstract boolean supportDuoCamera();
     public abstract boolean supportAntishake();
     public abstract void setAntishake(boolean antishakeOn);
@@ -732,12 +734,16 @@ public abstract class CameraEngine implements
     public abstract void takeVideo(@NonNull VideoResult.Stub stub,
                                    @Nullable File file,
                                    @Nullable FileDescriptor fileDescriptor);
-    public abstract void takeVideoSnapshot(@NonNull VideoResult.Stub stub, @NonNull File file, Size size, boolean isFlip);
+    public abstract void takeVideoSnapshot(@NonNull VideoResult.Stub stub, @NonNull File file, Size size, boolean isFlip, int rotation);
     public abstract void stopVideo(boolean isCameraShutdown);
 
     public abstract long getTimeStamp();
 
+    // 向编码器内传入音频数据进行合成
     public abstract void putAudioPcm(byte[] pcm, int length, boolean isEndOfStream);
+
+    // 设置横竖屏
+    public abstract void setOrientation(int orientation);
 
     //endregion
 }

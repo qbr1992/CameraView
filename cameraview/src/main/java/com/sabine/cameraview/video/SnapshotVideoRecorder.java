@@ -271,6 +271,12 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
                         frame.timestampMillis = System.currentTimeMillis();
                         frame.cropScaleX = scaleX;
                         frame.cropScaleY = scaleY;
+                        // 为了解决在倒计时过程中旋转屏幕导致录制结果颠倒的问题 ：mResult.rotation为倒计时开始时的角度；mResult.deviceRotation为倒计时结束时的角度
+                        if (mResult.deviceRotation != mResult.rotation && Math.abs(mResult.rotation - mResult.deviceRotation) % 180 != 0) {
+                            frame.drawRotation = (rotation + 180) % 360;
+                        } else {
+                            frame.drawRotation = rotation;
+                        }
                         surfaceTexture.getTransformMatrix(frame.transform);
                         mEncoderEngine.notify(TextureMediaEncoder.FRAME_EVENT, frame);
                     }

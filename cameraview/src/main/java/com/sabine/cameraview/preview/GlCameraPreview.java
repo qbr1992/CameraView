@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.SurfaceHolder;
 import android.view.View;
@@ -15,9 +16,12 @@ import androidx.annotation.VisibleForTesting;
 
 import com.sabine.cameraview.R;
 import com.sabine.cameraview.filter.Filter;
+import com.sabine.cameraview.filter.MultiFilter;
 import com.sabine.cameraview.filter.NoFilter;
+import com.sabine.cameraview.filters.BeautyAdjustV1Filter;
 import com.sabine.cameraview.internal.GlTextureDrawer;
 import com.sabine.cameraview.size.AspectRatio;
+import com.sabine.cameraview.utils.OpenGLUtils;
 
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -74,9 +78,12 @@ public class GlCameraPreview extends CameraPreview<GLSurfaceView, SurfaceTexture
     private View mRootView;
     private Filter mCurrentFilter;
     private float mCurrentFilterLevel;
+    private int mLutTexture = 0;
+    private Context mContext;
 
     public GlCameraPreview(@NonNull Context context, @NonNull ViewGroup parent) {
         super(context, parent);
+        mContext = context;
     }
 
     @NonNull
@@ -148,10 +155,23 @@ public class GlCameraPreview extends CameraPreview<GLSurfaceView, SurfaceTexture
         @RendererThread
         @Override
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+            mOutputTextureDrawer = new GlTextureDrawer();
+            //if (mLutTexture == 0) {
+                mLutTexture = OpenGLUtils.createTextureFromAssets(mContext, "texture/beautyLut_16_16.png");
+            //}
             if (mCurrentFilter == null) {
                 mCurrentFilter = new NoFilter();
+            } else {
+                if (mCurrentFilter instanceof MultiFilter) {
+                    for (Filter filter: ((MultiFilter) mCurrentFilter).getFilters()) {
+                        if (filter instanceof BeautyAdjustV1Filter) {
+                            ((BeautyAdjustV1Filter) filter).setLutTexture(mLutTexture);
+                            break;
+                        }
+                    }
+                }
             }
-            mOutputTextureDrawer = new GlTextureDrawer();
+
             mOutputTextureDrawer.setFilter(mCurrentFilter);
             final int textureId = mOutputTextureDrawer.getTexture().getId();
             mInputSurfaceTexture = new SurfaceTexture(textureId);
@@ -351,6 +371,13 @@ public class GlCameraPreview extends CameraPreview<GLSurfaceView, SurfaceTexture
         if (hasSurface()) {
             filter.setSize(mOutputSurfaceWidth, mOutputSurfaceHeight);
         }
+        if (filter instanceof MultiFilter && mLutTexture != 0)
+            for (Filter filter1: ((MultiFilter) mCurrentFilter).getFilters()) {
+                if (filter1 instanceof BeautyAdjustV1Filter) {
+                    ((BeautyAdjustV1Filter) filter1).setLutTexture(mLutTexture);
+                    break;
+                }
+            }
 
         getView().queueEvent(new Runnable() {
             @Override

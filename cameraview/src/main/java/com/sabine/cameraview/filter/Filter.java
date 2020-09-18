@@ -2,6 +2,7 @@ package com.sabine.cameraview.filter;
 
 import androidx.annotation.NonNull;
 
+import com.otaliastudios.opengl.texture.GlTexture;
 import com.sabine.cameraview.CameraView;
 
 import java.io.File;
@@ -89,4 +90,6 @@ public interface Filter {
      */
     @NonNull
     Filter copy();
+
+    void setInputImageTexture0(GlTexture glTexture);
 }

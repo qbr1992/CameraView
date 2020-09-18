@@ -3,6 +3,7 @@ package com.sabine.cameraview.filter;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
+import com.otaliastudios.opengl.texture.GlTexture;
 import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.size.Size;
 import com.otaliastudios.opengl.draw.GlDrawable;
@@ -91,6 +92,7 @@ public abstract class BaseFilter implements Filter {
     @VisibleForTesting GlTextureProgram program = null;
     private GlDrawable programDrawable = null;
     @VisibleForTesting Size size;
+    private GlTexture inputImageTexture0;
 
     @SuppressWarnings("WeakerAccess")
     protected String vertexPositionName = DEFAULT_VERTEX_POSITION_NAME;
@@ -207,5 +209,9 @@ public abstract class BaseFilter implements Filter {
         } catch (InstantiationException e) {
             throw new RuntimeException("Filters should have a public no-arguments constructor.", e);
         }
+    }
+
+    public void setInputImageTexture0(GlTexture glTexture) {
+        inputImageTexture0 = glTexture;
     }
 }

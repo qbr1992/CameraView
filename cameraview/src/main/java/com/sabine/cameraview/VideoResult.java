@@ -29,6 +29,7 @@ public class VideoResult {
         public boolean isSnapshot;
         public Location location;
         public int rotation;
+        public int deviceRotation;
         public Size size;
         public File file;
         public FileDescriptor fileDescriptor;

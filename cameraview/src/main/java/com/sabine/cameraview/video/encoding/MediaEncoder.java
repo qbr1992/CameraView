@@ -265,15 +265,15 @@ public abstract class MediaEncoder {
      */
     final void stop() {
         if (mState >= STATE_STOPPING) {
-            LogUtil.w(mName, "Wrong state while stopping. Aborting." + mState);
+            LOG.w(mName, "Wrong state while stopping. Aborting." + mState);
             return;
         }
         setState(STATE_STOPPING);
-        LogUtil.e(mName, "Stop was called. Posting.");
+        LOG.e(mName, "Stop was called. Posting.");
         mWorker.post(new Runnable() {
             @Override
             public void run() {
-                LogUtil.e(mName, "Stop was called. Executing.");
+                LOG.e(mName, "Stop was called. Executing.");
                 onStop();
             }
         });

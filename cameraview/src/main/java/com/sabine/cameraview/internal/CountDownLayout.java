@@ -1,6 +1,7 @@
 package com.sabine.cameraview.internal;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -25,7 +26,7 @@ public class CountDownLayout extends View {
 
     private CountDownListener mCountDownListener;
 
-    private int mRotation = 0;
+    private int mOrientation = 0;
 
     public CountDownLayout(Context context) {
         this(context, null);
@@ -37,6 +38,7 @@ public class CountDownLayout extends View {
 
     public CountDownLayout(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        setWillNotDraw(false);
         initData();
     }
 
@@ -56,11 +58,12 @@ public class CountDownLayout extends View {
         textPaint.setAntiAlias(true);
     }
 
-    public void startDraw(CountDownListener countDownListener, int rotation) {
+    public void startDraw(CountDownListener countDownListener, int orientation) {
         this.mCountDownListener = countDownListener;
         isDrawProgress = true;
-        this.mRotation = rotation;
+        this.mOrientation = orientation;
         postInvalidate();
+//        mCountDownListener.countdownOver();
     }
 
     @Override
@@ -86,26 +89,7 @@ public class CountDownLayout extends View {
         }
         if (index > 0) {
             Bitmap bitmap = BitmapFactory.decodeResource(getResources(), timerRes[index - 1]);
-            bitmap = compressBitmap(bitmap,getWidth() / 5);
-            if (mRotation == 90) {
-                canvas.rotate(-90);
-                canvas.translate(-getHeight(), getWidth() / 10);
-                if (centerX == 0) centerX = getHeight() * 6 / 10;
-                if (centerY == 0) centerY = getWidth() * 4 / 10;
-            } else if (mRotation == 270) {
-                canvas.rotate(90);
-                canvas.translate(getHeight() / 10, -getWidth());
-                if (centerX == 0) centerX = getHeight() * 4 / 10;
-                if (centerY == 0) centerY = getWidth() * 4 / 10;
-            } else if (mRotation == 180) {
-                canvas.rotate(180);
-                canvas.translate(-getWidth(), -getHeight());
-                if (centerX == 0) centerX = getWidth() / 2;
-                if (centerY == 0) centerY = getHeight() * 4 / 10;
-            } else {
-                if (centerX == 0) centerX = getWidth() / 2;
-                if (centerY == 0) centerY = getHeight() * 4 / 10;
-            }
+            bitmap = compressBitmap(bitmap,Math.min(getHeight(), getWidth()) / 5);
             if (centerX == 0) centerX = getWidth() / 2;
             if (centerY == 0) centerY = getHeight() * 4 / 10;
             canvas.drawBitmap(bitmap, centerX - bitmap.getWidth() / 2, centerY - bitmap.getHeight() / 2, textPaint);
@@ -116,7 +100,7 @@ public class CountDownLayout extends View {
             public void run() {
                 invalidate();
             }
-        }, 800);
+        }, 1000);
         if (index < 0) {
             // 清空 canvas
             centerX = 0;

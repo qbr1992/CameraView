@@ -61,7 +61,6 @@ class AudioTimestamp {
         long bufferEndTimeUs = System.nanoTime() / 1000; // now
         long bufferStartTimeUs = bufferEndTimeUs - bufferDurationUs;
 
-//        Log.e("aaa", "increaseUs: bufferEndTimeUs === " + bufferEndTimeUs);
 
         // If this is the first time, the base time is the buffer start time.
 //        if (mBytesSinceBaseTime == 0) mBaseTimeUs = bufferStartTimeUs;

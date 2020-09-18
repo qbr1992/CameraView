@@ -399,7 +399,7 @@ public class Camera1Engine extends CameraBaseEngine implements
     @EngineThread
     @Override
     protected void onTakeVideoSnapshot(@NonNull VideoResult.Stub stub,
-                                       @NonNull AspectRatio outputRatio) {
+                                       @NonNull AspectRatio outputRatio, int rotation) {
         if (!(mPreview instanceof RendererCameraPreview)) {
             throw new IllegalStateException("Video snapshots are only supported with GL_SURFACE.");
         }
