@@ -322,7 +322,7 @@ public class FocusLayout extends View {
                 }
                 downX = (int) event.getX();
                 // 每次点击初始化曝光值
-                exposureProgress = initExposureProgress;
+//                exposureProgress = initExposureProgress;
                 isMoveOccurs = false;
                 actionDownExposure(event);
                 break;
