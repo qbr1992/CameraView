@@ -3,6 +3,7 @@ package com.sabine.cameraview.engine;
 import android.content.res.Configuration;
 import android.location.Location;
 import android.util.Log;
+import android.util.Range;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
@@ -1005,7 +1006,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
-    public List<Integer> getSupportPreviewFramerate() {
+    public Range<Integer>[] getSupportPreviewFramerate() {
         return mCameraOptions.getPreviewFrameRateArray();
     }
 

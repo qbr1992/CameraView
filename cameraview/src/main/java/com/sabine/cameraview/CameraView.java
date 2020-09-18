@@ -27,6 +27,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.Range;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -2742,7 +2743,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                 Axis.RELATIVE_TO_SENSOR);
     }
 
-    public List<Integer> getSupportPreviewFramerate() {
+    public Range<Integer>[] getSupportPreviewFramerate() {
         if (mCameraEngine != null) return mCameraEngine.getSupportPreviewFramerate();
         return null;
     }

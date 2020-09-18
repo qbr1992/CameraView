@@ -5,6 +5,7 @@ import android.graphics.PointF;
 import android.location.Location;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Range;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -703,7 +704,7 @@ public abstract class CameraEngine implements
     public abstract boolean getPreviewFrameRateExact();
     public abstract void setPreviewFrameRate(float previewFrameRate);
     public abstract boolean supportHighSpeed();
-    public abstract List<Integer> getSupportPreviewFramerate();
+    public abstract Range<Integer>[] getSupportPreviewFramerate();
     public abstract boolean supportDuoCamera();
     public abstract boolean supportAntishake();
     public abstract void setAntishake(boolean antishakeOn);
