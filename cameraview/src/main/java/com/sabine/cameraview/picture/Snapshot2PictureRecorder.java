@@ -95,7 +95,7 @@ public class Snapshot2PictureRecorder extends SnapshotGlPictureRecorder {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, mOriginalAeMode);
                 builder.set(CaptureRequest.FLASH_MODE, mOriginalFlashMode);
                 holder.applyBuilder(this);
-            } catch (CameraAccessException ignore) {}
+            } catch (CameraAccessException|IllegalStateException|IllegalArgumentException ignore) {}
         }
     }
 

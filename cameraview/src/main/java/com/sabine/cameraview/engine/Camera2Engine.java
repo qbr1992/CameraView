@@ -152,6 +152,7 @@ public class Camera2Engine extends CameraBaseEngine implements
     private <T> T readCharacteristic(@NonNull CameraCharacteristics characteristics,
                              @NonNull CameraCharacteristics.Key<T> key,
                              @NonNull T fallback) {
+        if (characteristics == null) return fallback;
         T value = characteristics.get(key);
         return value == null ? fallback : value;
     }
@@ -266,7 +267,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                         mRepeatingRequestCallback, null);
             } catch (CameraAccessException e) {
                 throw new CameraException(e, errorReason);
-            } catch (IllegalStateException e) {
+            } catch (IllegalStateException|IllegalArgumentException e) {
                 // mSession is invalid - has been closed. This is extremely worrying because
                 // it means that the session state and getPreviewState() are not synced.
                 // This probably signals an error in the setup/teardown synchronization.
@@ -838,7 +839,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 // unrecoverable exception rather than just swallow, so everything gets stopped.
                 LOG.w("onStopPreview:", "abortCaptures failed!", e);
                 throw createCameraException(e);
-            } catch (IllegalStateException e) {
+            } catch (IllegalStateException|IllegalArgumentException e) {
                 // This tells us that the session was already closed.
                 // Not sure if this can happen, but we can swallow it.
             }
@@ -993,7 +994,7 @@ public class Camera2Engine extends CameraBaseEngine implements
                 mPictureRecorder.take();
             } catch (CameraAccessException e) {
                 throw createCameraException(e);
-            }
+            } catch (IllegalStateException|IllegalArgumentException ignore) {}
         }
     }
 
@@ -1312,11 +1313,11 @@ public class Camera2Engine extends CameraBaseEngine implements
                     mFlash = Flash.OFF;
                     applyFlash(mRepeatingRequestBuilder, old);
                     try {
-                        mSession.capture(mRepeatingRequestBuilder.build(), null,
+                        if (mSession != null) mSession.capture(mRepeatingRequestBuilder.build(), null,
                                 null);
                     } catch (CameraAccessException e) {
                         throw createCameraException(e);
-                    }
+                    } catch (IllegalStateException|IllegalArgumentException ignore) {}
                     mFlash = flash;
                     applyFlash(mRepeatingRequestBuilder, old);
                     applyRepeatingRequestBuilder();
@@ -1812,13 +1813,12 @@ public class Camera2Engine extends CameraBaseEngine implements
         try {
             LOG.e("applyBuilder: kye=" + CaptureRequest.CONTROL_AF_TRIGGER + ", value=" + CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
             if (mSession != null) mSession.capture(mRepeatingRequestBuilder.build(), mRepeatingRequestCallback, null);
-        }
-        catch(CameraAccessException e) {
+        } catch(CameraAccessException e) {
             LOG.e("failed to cancel autofocus [capture]");
             LOG.e("reason: " + e.getReason());
             LOG.e("message: " + e.getMessage());
             e.printStackTrace();
-        }
+        } catch (IllegalStateException|IllegalArgumentException ignore) {}
         mRepeatingRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
         LOG.e("applyRepeatingRequestBuilder: kye=" + CaptureRequest.CONTROL_AF_TRIGGER + ", value=" + CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
         applyRepeatingRequestBuilder();
@@ -2056,7 +2056,7 @@ public class Camera2Engine extends CameraBaseEngine implements
             throws CameraAccessException {
         // Risky - would be better to ensure that thread is the engine one.
         if (getState() == CameraState.PREVIEW && !isChangingState()) {
-            mSession.capture(builder.build(), mRepeatingRequestCallback, null);
+            if (mSession != null) mSession.capture(builder.build(), mRepeatingRequestCallback, null);
         }
     }
 

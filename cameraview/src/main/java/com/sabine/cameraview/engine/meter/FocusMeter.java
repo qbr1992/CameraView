@@ -127,7 +127,7 @@ public class FocusMeter extends BaseMeter {
                     CaptureRequest.CONTROL_AF_TRIGGER_START);
             try {
                 holder.applyBuilder(this, holder.getBuilder(this));
-            } catch (CameraAccessException e) {
+            } catch (CameraAccessException|IllegalStateException|IllegalArgumentException e) {
                 e.printStackTrace();
             }
         }

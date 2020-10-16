@@ -1007,7 +1007,8 @@ public abstract class CameraBaseEngine extends CameraEngine {
 
     @Override
     public Range<Integer>[] getSupportPreviewFramerate() {
-        return mCameraOptions.getPreviewFrameRateArray();
+        if (mCameraOptions != null) return mCameraOptions.getPreviewFrameRateArray();
+        return null;
     }
 
     //endregion
