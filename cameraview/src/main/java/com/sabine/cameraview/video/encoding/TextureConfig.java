@@ -14,6 +14,7 @@ import com.sabine.cameraview.overlay.OverlayDrawer;
 public class TextureConfig extends VideoConfig {
 
     public int textureId;
+    public boolean frontIsFirst;
     public Overlay.Target overlayTarget;
     public OverlayDrawer overlayDrawer;
     public int overlayRotation;
@@ -26,6 +27,7 @@ public class TextureConfig extends VideoConfig {
         TextureConfig copy = new TextureConfig();
         copy(copy);
         copy.textureId = this.textureId;
+        copy.frontIsFirst = this.frontIsFirst;
         copy.overlayDrawer = this.overlayDrawer;
         copy.overlayTarget = this.overlayTarget;
         copy.overlayRotation = this.overlayRotation;

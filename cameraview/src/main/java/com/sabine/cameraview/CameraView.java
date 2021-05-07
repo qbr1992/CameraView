@@ -16,6 +16,7 @@ import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -27,8 +28,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.util.Range;
 import android.view.MotionEvent;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -57,6 +58,7 @@ import com.sabine.cameraview.engine.CameraEngine;
 import com.sabine.cameraview.engine.offset.Axis;
 import com.sabine.cameraview.engine.offset.Reference;
 import com.sabine.cameraview.engine.orchestrator.CameraState;
+import com.sabine.cameraview.filter.DualInputTextureFilter;
 import com.sabine.cameraview.filter.Filter;
 import com.sabine.cameraview.filter.FilterParser;
 import com.sabine.cameraview.filter.Filters;
@@ -74,6 +76,7 @@ import com.sabine.cameraview.gesture.PinchGestureFinder;
 import com.sabine.cameraview.gesture.ScrollGestureFinder;
 import com.sabine.cameraview.gesture.TapGestureFinder;
 import com.sabine.cameraview.internal.CountDownLayout;
+import com.sabine.cameraview.internal.FaceRangeLayout;
 import com.sabine.cameraview.internal.FocusLayout;
 import com.sabine.cameraview.internal.GridLinesLayout;
 import com.sabine.cameraview.internal.CropHelper;
@@ -146,6 +149,8 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     private int mFrameProcessingExecutors;
     private Context mContext;
 
+    private CameraPreview.DualInputTextureMode mPendingDualMode;
+
     // Components
     private Handler mUiHandler;
     private Executor mFrameProcessingExecutor;
@@ -172,10 +177,20 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @VisibleForTesting MarkerLayout mMarkerLayout;
     @VisibleForTesting CountDownLayout mCountDownLayout;
     @VisibleForTesting FocusLayout mFocusLayout;
+    @VisibleForTesting FaceRangeLayout mFaceRangeLayout;
     private boolean mKeepScreenOn;
     @SuppressWarnings({"FieldCanBeLocal", "unused"})
     private boolean mExperimental;
     private boolean mInEditor;
+
+    private boolean mUsingFaceDetection = false;
+    private CameraEngine.Face [] mFacesDetected;
+    private final Matrix mCamera2PreviewMatrix = new Matrix();
+    private final Matrix mPreview2CameraMatrix = new Matrix();
+    private final RectF mFaceRect = new RectF();
+    private FaceDetectRequestListener mFaceDetectRequestListener;
+
+    private int mFirstCameraIndex = 0;  //多摄时默认第一路视频从mFirstCameraIndex开始
 
     // Overlays
     @VisibleForTesting OverlayLayout mOverlayLayout;
@@ -266,6 +281,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         mMarkerLayout = new MarkerLayout(context);
         mCountDownLayout = new CountDownLayout(context);
         mFocusLayout = new FocusLayout(context);
+        mFaceRangeLayout = new FaceRangeLayout(context);
         mFocusLayout.setCameraView(this);
         mFocusLayout.setOnFocusListener(this);
         addView(mGridLinesLayout);
@@ -273,6 +289,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         addView(mOverlayLayout);
         addView(mCountDownLayout);
         addView(mFocusLayout);
+        addView(mFaceRangeLayout);
 
         // Create the engine
         doInstantiateEngine();
@@ -296,7 +313,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         setPictureMetering(pictureMetering);
         setPictureSnapshotMetering(pictureSnapshotMetering);
         setPictureFormat(controls.getPictureFormat());
-        setVideoSize(getVideoSize());
+        setVideoSize(getVideoSize(), false);
         setVideoCodec(controls.getVideoCodec());
         setVideoBitRate(videoBitRate);
         setAutoFocusResetDelay(autoFocusResetDelay);
@@ -325,6 +342,9 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
         // Create the orientation helper
         mOrientationHelper = new OrientationHelper(context, mCameraCallbacks);
+
+        mFacesDetected = null;
+        mFaceDetectRequestListener = null;
     }
 
     /**
@@ -793,7 +813,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     /**
      * Sets the lifecycle owner for this view. This means you don't need
-     * to call {@link #open()}, {@link #close()} or {@link #destroy()} at all.
+     * to call {@link #open(int)}, {@link #close()} or {@link #destroy()} at all.
      *
      * If you want that lifecycle stopped controlling the state of the camera,
      * pass null in this method.
@@ -820,16 +840,19 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     /**
      * Starts the camera preview, if not started already.
      * This should be called onResume(), or when you are ready with permissions.
+     *
+     * @param firstCameraIndex 多摄时默认第一路视频从mFirstCameraIndex开始
      */
 //    @OnLifecycleEvent(Lifecycle.Event.ON_RESUME)
-    public void open() {
+    public void open(int firstCameraIndex) {
         if (mInEditor) return;
         if (mCameraPreview != null) mCameraPreview.onResume();
         if (checkPermissions(getAudio())) {
             // Update display orientation for current CameraEngine
             mOrientationHelper.enable();
             mCameraEngine.getAngles().setDisplayOffset(mOrientationHelper.getLastDisplayOffset());
-            mCameraEngine.start();
+            mFirstCameraIndex = firstCameraIndex;
+            mCameraEngine.start(mFirstCameraIndex);
         }
     }
 
@@ -971,8 +994,8 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     public <T extends Control> T get(@NonNull Class<T> controlClass) {
         if (controlClass == Audio.class) {
             return (T) getAudio();
-        } else if (controlClass == Facing.class) {
-            return (T) getFacing();
+//        } else if (controlClass == Facing.class) {
+//            return (T) getFacing();
         } else if (controlClass == Flash.class) {
             return (T) getFlash();
         } else if (controlClass == Grid.class) {
@@ -1059,7 +1082,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         setAudioBitRate(oldEngine.getAudioBitRate());
         setPictureSize(oldEngine.getPictureSize());
         setPictureFormat(oldEngine.getPictureFormat());
-        setVideoSize(oldEngine.getVideoSize());
+        setVideoSize(oldEngine.getVideoSize(), false);
         setVideoCodec(oldEngine.getVideoCodec());
         setVideoBitRate(oldEngine.getVideoBitRate());
         setAutoFocusResetDelay(oldEngine.getAutoFocusResetDelay());
@@ -1095,6 +1118,18 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     @Nullable
     public CameraOptions getCameraOptions() {
         return mCameraEngine.getCameraOptions();
+    }
+
+    /**
+     * Returns a {@link CameraOptions} instance holding supported options for this camera
+     * session. This might change over time. It's better to hold a reference from
+     * {@link CameraListener#onCameraOpened(CameraOptions)}.
+     *
+     * @return an options map, or null if camera was not opened
+     */
+    @Nullable
+    public CameraOptions getCamera2Options() {
+        return mCameraEngine.getCamera2Options();
     }
 
     /**
@@ -1291,9 +1326,24 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * @see Facing#BACK_NORMAL
      *
      * @param facing a facing value.
+     * @param firstCameraIndex 预览/录制显示的视频从firstCameraIndex索引的camera开始.
+     * @param isResume 是否刷新CameraPreview.
      */
-    public void setFacing(@NonNull Facing facing) {
-        mCameraEngine.setFacing(facing);
+    public void setFacing(@NonNull Facing[] facing, int firstCameraIndex, boolean isResume) {
+        if (mCameraPreview != null && isResume) mCameraPreview.onResume();
+        if (checkPermissions(getAudio())) {
+            // Update display orientation for current CameraEngine
+            if (mCameraPreview != null && mPendingDualMode != null) {
+                mCameraPreview.setDualInputTextureMode(mPendingDualMode);
+                mPendingDualMode = null;
+            }
+            mOrientationHelper.enable();
+            mCameraEngine.getAngles().setDisplayOffset(mOrientationHelper.getLastDisplayOffset());
+            mFirstCameraIndex = firstCameraIndex;
+            mCameraEngine.setFacing(facing, mFirstCameraIndex);
+        }
+//        mFirstCameraIndex = firstCameraIndex;
+//        mCameraEngine.setFacing(facing, mFirstCameraIndex);
     }
 
     /**
@@ -1301,7 +1351,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * @return a facing value.
      */
     @NonNull
-    public Facing getFacing() {
+    public Facing[] getFacing() {
         return mCameraEngine.getFacing();
     }
 
@@ -1311,16 +1361,18 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      *
      * @return the new facing value
      */
-    public Facing toggleFacing() {
-        Facing facing = mCameraEngine.getFacing();
-        switch (facing) {
-            case BACK_NORMAL:
-                setFacing(Facing.FRONT);
-                break;
+    public Facing[] toggleFacing() {
+        Facing facing[] = mCameraEngine.getFacing();
+        if (facing.length == 1) {
+            switch (facing[0]) {
+                case BACK_NORMAL:
+                    setFacing(new Facing[]{Facing.FRONT}, 0, false);
+                    break;
 
-            case FRONT:
-                setFacing(Facing.BACK_NORMAL);
-                break;
+                case FRONT:
+                    setFacing(new Facing[]{Facing.BACK_NORMAL}, 0, false);
+                    break;
+            }
         }
 
         return mCameraEngine.getFacing();
@@ -1462,7 +1514,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * This is typically NOT NEEDED. The default size selector is already smart enough to respect
      * the picture/video output aspect ratio, and be bigger than the surface so that there is no
      * upscaling. If all you want is set an aspect ratio, use {@link #setPictureSize(Size)}
-     * and {@link #setVideoSize(Size)}.
+     * and {@link #setVideoSize(Size, boolean)}.
      *
      * When stream size changes, the {@link CameraView} is remeasured so any WRAP_CONTENT dimension
      * is recomputed accordingly.
@@ -1594,22 +1646,47 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
      * See the {@link SizeSelectors} class for handy utilities for creating selectors.
      *
      * @param videoSize a size of video
+     * @param isRestart Whether to reset the camera
      */
-    public void setVideoSize(@NonNull Size videoSize) {
-        mCameraEngine.setVideoSize(videoSize);
+    public void setVideoSize(@NonNull Size videoSize, boolean isRestart) {
+        mCameraEngine.setVideoSize(videoSize, isRestart);
     }
 
+    /**
+     * 判断是否支持4K录制，双摄需要两路都支持
+     * @return 是否支持4K
+     */
     public boolean isSupport4K() {
         CameraOptions options = getCameraOptions();
-        if (options != null) {
+        CameraOptions camera2Options = getCamera2Options();
+        boolean support4K = false;
+        boolean camera2Support4K = false;
+        if (camera2Options != null && options != null) { // 双摄
+            Collection<Size> sizes = options.getSupportedVideoSizes();
+            Collection<Size> sizes2 = camera2Options.getSupportedVideoSizes();
+            for (Size size : sizes) {
+                if ((size.getWidth() >= 3840 && size.getHeight() >= 2160) || (size.getWidth() >= 2160 && size.getHeight() >= 3840)) {
+                    support4K = true;
+                    break;
+                }
+            }
+            for (Size size : sizes2) {
+                if ((size.getWidth() >= 3840 && size.getHeight() >= 2160) || (size.getWidth() >= 2160 && size.getHeight() >= 3840)) {
+                    camera2Support4K = true;
+                    break;
+                }
+            }
+            support4K = support4K && camera2Support4K;
+        } else if (options != null) { // 单摄
             Collection<Size> sizes = options.getSupportedVideoSizes();
             for (Size size : sizes) {
                 if ((size.getWidth() >= 3840 && size.getHeight() >= 2160) || (size.getWidth() >= 2160 && size.getHeight() >= 3840)) {
-                    return true;
+                    support4K = true;
+                    break;
                 }
             }
         }
-        return false;
+        return support4K;
     }
 
     public boolean supportHighSpeedPreview() {
@@ -1773,23 +1850,30 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
     private int mRotation = 0;
     public void setDeviceRotation(int rotation) {
-//        mRotation = rotation;
+        mRotation = rotation;
     }
 
     private boolean isStarted = false;
     public void startRecordVideo(@NonNull final File file, final Size size) {
+        mOrientationHelper.setRecording(true);
         final int rotation = mCameraEngine.getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
         mCountDownLayout.startDraw(new CountDownLayout.CountDownListener() {
             @Override
             public void countdownOver() {
-                if (mCameraEngine.getFacing() == Facing.FRONT) takeVideoSnapshot(file, size, flip, rotation);
-                else takeVideoSnapshot(file, size, false, rotation);
+                Facing[] facings = mCameraEngine.getFacing();
+                if (facings.length == 1) {
+                    if (facings[0] == Facing.FRONT) takeVideoSnapshot(file, size, flip, rotation);
+                    else takeVideoSnapshot(file, size, false, rotation);
+                } else {
+                    takeVideoSnapshot(file, size, false, rotation);
+                }
                 isStarted = true;
             }
         }, mOrientation);
     }
 
     public void endRecordVideo(boolean isPause) {
+        mOrientationHelper.setRecording(false);
         if (isStarted) {
             stopVideo(isPause);
             isStarted = false;
@@ -2153,14 +2237,32 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                     for (CameraListener listener : mListeners) {
                         listener.onCameraOpened(options);
                     }
+
+                    if(mUsingFaceDetection && mCameraEngine != null && mFaceDetectRequestListener != null) {
+                        CameraEngine.FACE_DETECT_MODE faceDetectMode = mCameraEngine.supportFaceDetection();
+                        if (mCameraEngine.dual())
+                            faceDetectMode = CameraEngine.FACE_DETECT_MODE.unSupport;
+                        if (faceDetectMode == CameraEngine.FACE_DETECT_MODE.support) {
+                            mCameraEngine.setFaceDetectionListener(new MyFaceDetectionListener());
+                            mCameraEngine.changeFaceDetection(mUsingFaceDetection);
+                        }
+                        mFaceDetectRequestListener.onFaceDetectModeStatus(faceDetectMode);
+                        mFacesDetected = null;
+                    }
+
                     if (mFocusLayout != null) mFocusLayout.initCameraViewData();
                 }
             });
         }
 
+        public void draw(Canvas canvas) {
+            if (mUsingFaceDetection)
+                mFaceRangeLayout.draw(canvas);
+        }
+
         @Override
         public void dispatchOnCameraClosed() {
-            LOG.i("dispatchOnCameraClosed");
+            LOG.e("dispatchOnCameraClosed");
             mUiHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -2169,6 +2271,16 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                     }
                 }
             });
+
+            if (mFaceRangeLayout != null)
+                mFaceRangeLayout.setFaces(null, false);
+
+            if (mUsingFaceDetection && mFaceDetectRequestListener != null)
+                mFaceDetectRequestListener.onFaceRegionResponse(null, new Rect(0, 0, getWidth(), getHeight()));
+//            if (mCameraPreview != null) {
+//                LOG.e("dispatchOnCameraClosed", "mCameraPreview.onPause()");
+//                mCameraPreview.onPause();
+//            }
         }
 
         @Override
@@ -2204,7 +2316,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
         @Override
         public void dispatchOnPictureTaken(@NonNull final PictureResult.Stub stub) {
-            LOG.i("dispatchOnPictureTaken", stub);
+            LOG.e("dispatchOnPictureTaken", stub);
             mUiHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -2212,12 +2324,23 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                     for (CameraListener listener : mListeners) {
                         listener.onPictureTaken(result);
                     }
-                    if (mTakePictureCallback != null && result.getData().length > 0) {
+                    if (mTakePictureCallback != null && result.getData() != null && result.getData().length > 0) {
+//                        File file = new File(getContext().getExternalCacheDir(), "picture.jpg");
+//                        LOG.e(file.getPath());
+//                        if (!file.exists() || file.delete()) {
+//                            try (OutputStream stream = new BufferedOutputStream(new FileOutputStream(file))) {
+//                                stream.write(result.getData());
+//                                stream.flush();
+//                            } catch (IOException e) {
+//                            }
+//                        }
+
                         Bitmap bitmap = BitmapFactory.decodeByteArray(result.getData(), 0, result.getData().length);
-                        Matrix matrix = new Matrix();
-//                        if (getCameraRotation() == 0 || getCameraRotation() == 180) matrix.postRotate(getCameraRotation() + 90);
-//                        if (getCameraRotation() == 90) matrix.postRotate(180);
-                        bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+//删除bitmap翻转，在SnapshotGlPictureRecorder的onRendererFrame中实现翻转操作
+//                        Matrix matrix = new Matrix();
+////                        if (getCameraRotation() == 0 || getCameraRotation() == 180) matrix.postRotate(getCameraRotation() + 90);
+////                        if (getCameraRotation() == 90) matrix.postRotate(180);
+//                        bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
                         mTakePictureCallback.takePictureOK(bitmap);
                     }
                 }
@@ -2233,6 +2356,18 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                     VideoResult result = new VideoResult(stub);
                     for (CameraListener listener : mListeners) {
                         listener.onVideoTaken(result);
+                    }
+                }
+            });
+        }
+
+        @Override
+        public void dispatchOnVideoFps(final int fps) {
+            mUiHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    for (CameraListener listener : mListeners) {
+                        listener.onVideoFps(fps);
                     }
                 }
             });
@@ -2284,6 +2419,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                     if (sensorController == null) {
                         //重力感应 监听相机镜头移动
                         sensorController = SensorController.getInstance(mContext);
+                        sensorController.setCameraView(CameraView.this);
                         sensorController.setCameraFocusListener(new SensorController.CameraFocusListener() {
                             @Override
                             public void onFocus() {
@@ -2327,7 +2463,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
 
         @Override
         public void onDisplayOffsetChanged(int displayOffset, boolean willRecreate) {
-            LOG.i("onDisplayOffsetChanged", displayOffset, "recreate:", willRecreate);
+            LOG.e("onDisplayOffsetChanged", displayOffset, "recreate:", willRecreate);
             if (!willRecreate) {
                 // Display offset changes when the device rotation lock is off and the activity
                 // is free to rotate. However, some changes will NOT recreate the activity, namely
@@ -2335,11 +2471,11 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                 LOG.w("onDisplayOffsetChanged", "restarting the camera.");
                 if (!isStarted) {
                     if (isOpened()) close();
-                    open();
+                    open(mFirstCameraIndex);
                 } else {
                     mCameraEngine.getAngles().setDisplayOffset(mOrientationHelper.getLastDisplayOffset());
                     if (mCameraEngine.getPreview() != null) {
-                        mCameraEngine.getPreview().setDrawRotation(mCameraEngine.getAngles().offset(Reference.BASE, Reference.VIEW, Axis.ABSOLUTE));
+                        mCameraEngine.setDrawRotation(mCameraEngine.getAngles().offset(Reference.BASE, Reference.VIEW, Axis.ABSOLUTE));
                     }
                 }
             }
@@ -2415,13 +2551,13 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         }
 
         @Override
-        public void dispatchOnVideoRecordingStart() {
+        public void dispatchOnVideoRecordingStart(final long timestamp) {
             LOG.i("dispatchOnVideoRecordingStart");
             mUiHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     for (CameraListener listener : mListeners) {
-                        listener.onVideoRecordingStart();
+                        listener.onVideoRecordingStart(timestamp);
                     }
                 }
             });
@@ -2683,7 +2819,7 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         if (mCameraPreview == null) {
             mPendingFilter = filter;
         } else {
-            boolean isNoFilter = filter instanceof NoFilter;
+            boolean isNoFilter = filter instanceof NoFilter || filter instanceof DualInputTextureFilter;
             boolean isFilterPreview = mCameraPreview instanceof FilterCameraPreview;
             // If not a filter preview, we only allow NoFilter (called on creation).
             if (!isNoFilter && !isFilterPreview) {
@@ -2705,6 +2841,11 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
         if (mCameraPreview instanceof FilterCameraPreview) {
             ((FilterCameraPreview) mCameraPreview).setFilterLevel(mFilterLevel);
         }
+    }
+
+    public void setBeauty(float parameterValue1, float parameterValue2) {
+        if (mCameraPreview != null)
+            mCameraPreview.setBeauty(parameterValue1, parameterValue2);
     }
 
     /**
@@ -2730,7 +2871,15 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     public boolean isCameraBackForward() {
-        return getFacing() != Facing.FRONT;
+        Facing[] facings = getFacing();
+        boolean isFront = false;
+        for (Facing facing : facings) {
+            if (facing == Facing.FRONT) {
+                isFront = true;
+                break;
+            }
+        }
+        return !isFront;
     }
 
     public void putAudioPcm(byte[] pcm, int length, boolean isEndOfStream) {
@@ -2743,9 +2892,23 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
                 Axis.RELATIVE_TO_SENSOR);
     }
 
-    public Range<Integer>[] getSupportPreviewFramerate() {
+    public List<Integer> getSupportPreviewFramerate() {
         if (mCameraEngine != null) return mCameraEngine.getSupportPreviewFramerate();
         return null;
+    }
+
+    /**
+     * 是否为双摄模式
+     * @return 是否为双摄模式
+     */
+    public boolean dual() {
+        if (mCameraEngine != null) return mCameraEngine.dual();
+        return false;
+    }
+
+    public void selectOpenedCamera(PointF legacyPoint) {
+        if (mCameraEngine != null)
+            mCameraEngine.selectOpenedCamera(legacyPoint);
     }
 
     //endregion
@@ -2760,5 +2923,196 @@ public class CameraView extends FrameLayout implements LifecycleObserver, FocusL
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////// endregion
+    /**
+     * switch two camera input texture .
+     */
+    public void switchInputTexture() {
+        if (mFocusLayout != null) mFocusLayout.switchDualCamera(mOrientation, true);
+        mCameraPreview.switchInputTexture();
+        setFirstCameraIndex(1-getFirstCameraIndex());
+    }
 
+    public int getFirstCameraIndex() {
+        if (mCameraEngine != null) return mCameraEngine.getFirstCameraIndex();
+        return 0;
+    }
+
+    public void setFirstCameraIndex(int index) {
+        if (mCameraEngine != null) mCameraEngine.setFirstCameraIndex(index);
+    }
+
+    /**
+     * set two camera input texture layout mode.
+     * @param dualInputTextureMode input texture layout mode
+     * @return if mCameraPreview is null return false, else return true.
+     */
+    public boolean setDualInputTextureMode(CameraPreview.DualInputTextureMode dualInputTextureMode) {
+        if (mCameraPreview != null) {
+            mCameraPreview.setDualInputTextureMode(dualInputTextureMode);
+            if (mFocusLayout != null) mFocusLayout.resetView();
+            return true;
+        } else {
+            mPendingDualMode = dualInputTextureMode;
+        }
+        return false;
+    }
+
+    public CameraPreview.DualInputTextureMode getDualInputTextureMode() {
+        if (mCameraPreview != null)
+            return mCameraPreview.getDualInputTextureMode();
+        else if (mPendingDualMode != null) {
+            return mPendingDualMode;
+        } else
+            return CameraPreview.DualInputTextureMode.UAD_MODE;
+    }
+
+    public CameraEngine.FACE_DETECT_MODE getSupportFaceDetection() {
+        if (mCameraEngine != null) {
+            return mCameraEngine.supportFaceDetection();
+        } else
+            return CameraEngine.FACE_DETECT_MODE.unKnown;
+    }
+
+    public boolean setUsingFaceDetection(boolean usingFaceDetection, FaceDetectRequestListener faceDetectRequestListener) {
+        if (mUsingFaceDetection == usingFaceDetection)
+            return true;
+
+        mUsingFaceDetection = usingFaceDetection;
+        if (mUsingFaceDetection) {
+            mFaceDetectRequestListener = faceDetectRequestListener;
+            if (mCameraEngine != null && mFaceDetectRequestListener != null) {
+                CameraEngine.FACE_DETECT_MODE faceDetectMode = mCameraEngine.supportFaceDetection();
+                if (mCameraEngine.dual())
+                    faceDetectMode = CameraEngine.FACE_DETECT_MODE.unSupport;
+                if (faceDetectMode == CameraEngine.FACE_DETECT_MODE.support) {
+                    mCameraEngine.setFaceDetectionListener(new MyFaceDetectionListener());
+                    mCameraEngine.changeFaceDetection(mUsingFaceDetection);
+                }
+                mFaceDetectRequestListener.onFaceDetectModeStatus(faceDetectMode);
+            }
+        } else {
+            if (mCameraEngine != null) {
+                mCameraEngine.changeFaceDetection(mUsingFaceDetection);
+                mCameraEngine.setFaceDetectionListener(null);
+                if (mFaceDetectRequestListener != null)
+                    mFaceDetectRequestListener.onFaceRegionResponse(null, new Rect(0, 0, getWidth(), getHeight()));
+            }
+            if (mFaceRangeLayout != null)
+                mFaceRangeLayout.setFaces(null, false);
+            mFaceDetectRequestListener = null;
+        }
+        return true;
+    }
+
+    public boolean getUsingFaceDetection() {
+        return mUsingFaceDetection;
+    }
+
+    public CameraEngine.Face [] getFacesDetected() {
+        // FindBugs warns about returning the array directly, but in fact we need to return direct access rather than copying, so that the on-screen display of faces rectangles updates
+        return mFacesDetected;
+    }
+
+    public interface FaceDetectRequestListener {
+        void onFaceRegionResponse(Rect faceRect, Rect viewRect);
+        void onFaceDetectModeStatus(CameraEngine.FACE_DETECT_MODE modeStatus);
+    }
+
+    class MyFaceDetectionListener implements CameraEngine.FaceDetectionListener {
+        @Override
+        public void onFaceDetection(final CameraEngine.Face[] faces, final boolean isChanged) {
+            if( mCameraEngine == null ) {
+                mFacesDetected = null;
+                return;
+            }
+
+            final Matrix matrix = getCameraToPreviewMatrix();
+
+            CameraEngine.Face maxFace = null;
+            if (faces.length>0) {
+                maxFace = faces[0];
+                mFaceRect.set(maxFace.rect);
+                matrix.mapRect(mFaceRect);
+                mFaceRect.round(maxFace.rect);
+            }
+
+            Activity activity = (Activity)CameraView.this.getContext();
+            final CameraEngine.Face finalMaxFace = maxFace;
+            activity.runOnUiThread(new Runnable() {
+                public void run() {
+                    // convert rects to preview screen space - also needs to be done on UI thread
+                    // (otherwise can have crashes if camera_controller becomes null in the meantime)
+
+//                                        for(CameraEngine.Face face : faces) {
+//                                            mFaceRect.set(face.rect);
+//                                            matrix.mapRect(mFaceRect);
+//                                            mFaceRect.round(face.rect);
+//                                        }
+
+                    if( mFacesDetected == null/* || mFacesDetected.length != faces.length*/ ) {
+                        // avoid unnecessary reallocations
+                        LOG.i("allocate new mFacesDetected");
+                        mFacesDetected = new CameraEngine.Face[1/*faces.length*/];
+                    }
+                    mFacesDetected[0] = finalMaxFace;
+//                                        System.arraycopy(faces, 0, mFacesDetected, 0, faces.length);
+                    if (mFaceRangeLayout != null)
+                        mFaceRangeLayout.setFaces(mFacesDetected, isChanged);
+
+                }
+            });
+            if (mFaceDetectRequestListener != null)
+                mFaceDetectRequestListener.onFaceRegionResponse(finalMaxFace == null ? null : finalMaxFace.rect, new Rect(0, 0, getWidth(), getHeight()));
+        }
+
+        private void calculateCameraToPreviewMatrix() {
+            if( mCameraEngine == null )
+                return;
+            mCamera2PreviewMatrix.reset();
+
+            boolean mirror = (mCameraEngine.getFacing()[0] == Facing.FRONT);
+            mCamera2PreviewMatrix.setScale(1, mirror ? -1 : 1);
+            int degrees = getDisplayRotationDegrees();
+//            int result = (mCameraEngine.getCameraOrientation() - degrees + 360) % 360;
+            int result = (mCameraEngine.getCameraOrientation() + degrees + 360) % 360;
+
+//            Log.e(TAG, "orientation of display relative to natural orientaton: " + mCameraEngine.getCameraOrientation());
+//            Log.e(TAG, "orientation of display relative to camera orientaton: " + result);
+
+            mCamera2PreviewMatrix.postRotate(result);
+
+            // Camera driver coordinates range from (-1000, -1000) to (1000, 1000).
+            // UI coordinates range from (0, 0) to (width, height).
+            mCamera2PreviewMatrix.postScale(mCameraPreview.getView().getWidth() / 2000f, mCameraPreview.getView().getHeight() / 2000f);
+            mCamera2PreviewMatrix.postTranslate(mCameraPreview.getView().getWidth() / 2f, mCameraPreview.getView().getHeight() / 2f);
+        }
+
+        private void calculatePreviewToCameraMatrix() {
+            if( mCameraEngine == null )
+                return;
+            calculateCameraToPreviewMatrix();
+            if( !mCamera2PreviewMatrix.invert(mPreview2CameraMatrix) ) {
+                LOG.i("calculatePreviewToCameraMatrix failed to invert matrix!?");
+            }
+        }
+
+        private Matrix getCameraToPreviewMatrix() {
+            calculateCameraToPreviewMatrix();
+            return mCamera2PreviewMatrix;
+        }
+
+        private int getDisplayRotationDegrees() {
+            int degrees = 0;
+            switch (mRotation) {
+                case Surface.ROTATION_0: degrees = 0; break;
+                case Surface.ROTATION_90: degrees = 90; break;
+                case Surface.ROTATION_180: degrees = 180; break;
+                case Surface.ROTATION_270: degrees = 270; break;
+                default:
+                    break;
+            }
+//            Log.d(TAG, "    degrees = " + degrees);
+            return degrees;
+        }
+    }
 }

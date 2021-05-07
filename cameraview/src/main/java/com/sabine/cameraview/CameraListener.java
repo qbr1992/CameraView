@@ -142,9 +142,10 @@ public abstract class CameraListener {
      * This can be used to show some UI indicator for video recording or counting time.
      *
      * @see #onVideoRecordingEnd()
+     * @param timestamp
      */
     @UiThread
-    public void onVideoRecordingStart() {
+    public void onVideoRecordingStart(long timestamp) {
 
     }
 
@@ -160,10 +161,19 @@ public abstract class CameraListener {
      *
      * This can be used to remove UI indicators for video recording.
      *
-     * @see #onVideoRecordingStart()
+     * @see #onVideoRecordingStart(long)
      */
     @UiThread
     public void onVideoRecordingEnd() {
+
+    }
+
+    /**
+     * Called once a second, return the fps value.
+     * @param fps The fps of video.
+     */
+    @UiThread
+    public void onVideoFps(int fps) {
 
     }
 

@@ -2,15 +2,16 @@ package com.sabine.cameraview.engine;
 
 import android.content.Context;
 import android.graphics.PointF;
+import android.graphics.Rect;
 import android.location.Location;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Range;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.google.android.gms.tasks.OnCanceledListener;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.SuccessContinuation;
@@ -69,13 +70,13 @@ import java.util.concurrent.TimeUnit;
  * been performed and trigger the steps 3 and 4.
  *
  * STATE
- * We only expose generic {@link #start()} and {@link #stop(boolean)} calls to the outside.
+ * We only expose generic {@link #start(int)} and {@link #stop(boolean)} calls to the outside.
  * The external users of this class are most likely interested in whether we have completed step 2
  * or not, since that tells us if we can act on the camera or not, rather than knowing about
  * steps 3 and 4.
  *
  * So in the {@link CameraEngine} notation,
- * - {@link #start()}: ASYNC - starts the engine (S2). When possible, at a later time,
+ * - {@link #start(int)}: ASYNC - starts the engine (S2). When possible, at a later time,
  *                     S3 and S4 are also performed.
  * - {@link #stop(boolean)}: ASYNC - stops everything: undoes S4, then S3, then S2.
  * - {@link #restart()}: ASYNC - completes a stop then a start.
@@ -117,6 +118,7 @@ public abstract class CameraEngine implements
         void onCameraPreviewStreamSizeChanged();
         void onShutter(boolean shouldPlaySound);
         void dispatchOnVideoTaken(@NonNull VideoResult.Stub stub);
+        void dispatchOnVideoFps(final int fps);
         void dispatchOnPictureTaken(@NonNull PictureResult.Stub stub);
         void dispatchOnFocusStart(@Nullable Gesture trigger, @NonNull PointF where);
         void dispatchOnFocusEnd(@Nullable Gesture trigger, boolean success, @NonNull PointF where);
@@ -125,7 +127,7 @@ public abstract class CameraEngine implements
                                                  @Nullable PointF[] fingers);
         void dispatchFrame(@NonNull Frame frame);
         void dispatchError(CameraException exception);
-        void dispatchOnVideoRecordingStart();
+        void dispatchOnVideoRecordingStart(long timestamp);
         void dispatchOnVideoEncodeStart(int bitrate);
         void dispatchOnVideoRecordingEnd();
     }
@@ -139,6 +141,17 @@ public abstract class CameraEngine implements
     @VisibleForTesting
     Handler mCrashHandler;
     private boolean openCamera = true;
+
+    enum CameraOpenState {
+        CAMERAOPENSTATE_CLOSED, // have yet to attempt to open the camera (either at all, or since the camera was closed)
+        CAMERAOPENSTATE_OPENING, // the camera is currently being opened
+        CAMERAOPENSTATE_OPENED, // either the camera is open
+        CAMERAOPENSTATE_CLOSING // the camera is currently being closed
+    }
+    protected CameraOpenState mCameraOpenState = CameraOpenState.CAMERAOPENSTATE_CLOSED;
+    protected boolean mReOpenCamera = false;
+
+    protected int mFirstCameraIndex = 0;    //多摄时默认第一路视频从mFirstCameraIndex开始
     private final Callback mCallback;
     private final CameraStateOrchestrator mOrchestrator
             = new CameraStateOrchestrator(new CameraOrchestrator.Callback() {
@@ -344,12 +357,18 @@ public abstract class CameraEngine implements
     public void restart() {
         LOG.i("RESTART:", "scheduled. State:", getState());
         stop(false);
-        start();
+        start(mFirstCameraIndex);
     }
 
     @NonNull
-    public Task<Void> start() {
+    public Task<Void> start(int firstCameraIndex) {
         LOG.i("START:", "scheduled. State:", getState());
+        if (mCameraOpenState == CameraOpenState.CAMERAOPENSTATE_CLOSING) {
+            mReOpenCamera = true;
+            return Tasks.forCanceled();
+        }
+
+        mFirstCameraIndex = firstCameraIndex;
         Task<Void> engine = startEngine();
         startBind();
         startPreview();
@@ -359,6 +378,12 @@ public abstract class CameraEngine implements
     @NonNull
     public Task<Void> stop(final boolean swallowExceptions) {
         LOG.i("STOP:", "scheduled. State:", getState());
+        mReOpenCamera = false;
+        if (mOrchestrator.getCurrentState() == CameraState.OFF)
+            return Tasks.forCanceled();
+
+        mCameraOpenState = CameraOpenState.CAMERAOPENSTATE_CLOSING;
+
         stopPreview(swallowExceptions);
         stopBind(swallowExceptions);
         return stopEngine(swallowExceptions);
@@ -394,6 +419,9 @@ public abstract class CameraEngine implements
                 new Callable<Task<CameraOptions>>() {
             @Override
             public Task<CameraOptions> call() {
+                if (mCameraOpenState == CameraOpenState.CAMERAOPENSTATE_CLOSING)
+                    return Tasks.forCanceled();
+
                 if (!collectCameraInfo(getFacing())) {
                     LOG.e("onStartEngine:", "No camera available for facing", getFacing());
                     throw new CameraException(CameraException.REASON_NO_CAMERA);
@@ -429,6 +457,29 @@ public abstract class CameraEngine implements
                 // Put this on the outer task so we're sure it's called after getState() is OFF.
                 // This was breaking some tests on rare occasions.
                 mCallback.dispatchOnCameraClosed();
+                mCameraOpenState = CameraOpenState.CAMERAOPENSTATE_CLOSED;
+                if (mReOpenCamera) {
+                    mReOpenCamera = false;
+                    start(mFirstCameraIndex);
+                }
+            }
+        }).addOnCanceledListener(new OnCanceledListener() {
+            @Override
+            public void onCanceled() {
+                mCameraOpenState = CameraOpenState.CAMERAOPENSTATE_CLOSED;
+                if (mReOpenCamera) {
+                    mReOpenCamera = false;
+                    start(mFirstCameraIndex);
+                }
+            }
+        }).addOnCompleteListener(new OnCompleteListener<Void>() {
+            @Override
+            public void onComplete(@NonNull Task<Void> task) {
+                mCameraOpenState = CameraOpenState.CAMERAOPENSTATE_CLOSED;
+                if (mReOpenCamera) {
+                    mReOpenCamera = false;
+                    start(mFirstCameraIndex);
+                }
             }
         });
     }
@@ -440,11 +491,11 @@ public abstract class CameraEngine implements
      * If so, implementors should set {@link Angles#setSensorOffset(Facing, int)}
      * and any other information (like camera ID) needed to start the engine.
      *
-     * @param facing the facing value
+     * @param facings the facing value
      * @return true if we have one
      */
     @EngineThread
-    protected abstract boolean collectCameraInfo(@NonNull Facing facing);
+    protected abstract boolean collectCameraInfo(@NonNull Facing... facings);
 
     /**
      * Starts the engine.
@@ -471,14 +522,17 @@ public abstract class CameraEngine implements
     @NonNull
     @EngineThread
     private Task<Void> startBind() {
-        if (!openCamera) {
-            return Tasks.forCanceled();
-        }
+//        if (!openCamera) {
+//            return Tasks.forCanceled();
+//        }
         return mOrchestrator.scheduleStateChange(CameraState.ENGINE, CameraState.BIND,
                 true,
                 new Callable<Task<Void>>() {
             @Override
             public Task<Void> call() {
+                if (mCameraOpenState == CameraOpenState.CAMERAOPENSTATE_CLOSING)
+                    return Tasks.forCanceled();
+
                 if (getPreview() != null && getPreview().hasSurface()) {
                     return onStartBind();
                 } else {
@@ -527,15 +581,27 @@ public abstract class CameraEngine implements
     @NonNull
     @EngineThread
     private Task<Void> startPreview() {
-        if (!openCamera) {
-            return Tasks.forCanceled();
-        }
+//        if (!openCamera) {
+//            return Tasks.forCanceled();
+//        }
         return mOrchestrator.scheduleStateChange(CameraState.BIND, CameraState.PREVIEW,
                 true,
                 new Callable<Task<Void>>() {
             @Override
             public Task<Void> call() {
+                if (mCameraOpenState == CameraOpenState.CAMERAOPENSTATE_CLOSING)
+                    return Tasks.forCanceled();
+
                 return onStartPreview();
+            }
+        }).addOnSuccessListener(new OnSuccessListener<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                // Put this on the outer task so we're sure it's called after getState() is OFF.
+                // This was breaking some tests on rare occasions.
+//                mCameraOpenState = CameraOpenState.CAMERAOPENSTATE_OPENED;
+                mReOpenCamera = false;
+//                LOG.e("------------camera start preview");
             }
         });
     }
@@ -595,6 +661,38 @@ public abstract class CameraEngine implements
         stopBind(false);
     }
 
+    public enum FACE_DETECT_MODE {
+        unKnown,
+        support,
+        unSupport
+    }
+
+    public static class Face {
+        public final int score;
+        /* The has values from [-1000,-1000] (for top-left) to [1000,1000] (for bottom-right) for whatever is
+         * the current field of view (i.e., taking zoom into account).
+         */
+        public final Rect rect;
+
+        Face(int score, Rect rect) {
+            this.score = score;
+            this.rect = rect;
+        }
+    }
+
+    public interface FaceDetectionListener {
+        void onFaceDetection(Face[] faces, boolean isChanged);
+    }
+
+
+    public void setFirstCameraIndex(int firstCameraIndex) {
+        mFirstCameraIndex = firstCameraIndex;
+    }
+
+    public int getFirstCameraIndex() {
+        return mFirstCameraIndex;
+    }
+
     //endregion
 
     //region Abstract getters
@@ -607,6 +705,9 @@ public abstract class CameraEngine implements
 
     @Nullable
     public abstract CameraOptions getCameraOptions();
+
+    @Nullable
+    public abstract CameraOptions getCamera2Options();
 
     @Nullable
     public abstract Size getPictureSize(@NonNull Reference reference);
@@ -636,7 +737,7 @@ public abstract class CameraEngine implements
     public abstract void setPictureSize(@NonNull Size pictureSize);
     @NonNull public abstract Size getPictureSize();
 
-    public abstract void setVideoSize(@NonNull Size videoSize);
+    public abstract void setVideoSize(@NonNull Size videoSize, boolean isRestart);
     @NonNull public abstract Size getVideoSize();
 
     public abstract void setVideoCodec(@NonNull VideoCodec codec);
@@ -669,8 +770,10 @@ public abstract class CameraEngine implements
     public abstract void setAutoFocusResetDelay(long delayMillis);
     public abstract long getAutoFocusResetDelay();
 
-    public abstract void setFacing(final @NonNull Facing facing);
-    @NonNull public abstract Facing getFacing();
+    public abstract void setFacing(final @NonNull Facing[] facing, int firstCameraIndex);
+    @NonNull public abstract Facing[] getFacing();
+
+    public abstract boolean dual();
 
     public abstract void setAudio(@NonNull Audio audio);
     @NonNull public abstract Audio getAudio();
@@ -684,6 +787,16 @@ public abstract class CameraEngine implements
     public abstract void setExposureCorrection(float EVvalue, @NonNull float[] bounds,
                                                @Nullable PointF[] points, boolean notify);
     public abstract float getExposureCorrectionValue();
+
+    public abstract void setExposureCorrection(float EVvalue, @NonNull float[] bounds,
+                                                     @Nullable PointF[] points, boolean notify, int index);
+    public abstract float getExposureCorrectionValue(int index);
+
+    // 是否锁定曝光
+    public abstract boolean isAutoExposure(int index);
+
+    // 是否锁定曝光
+    public abstract boolean isAutoExposure();
 
     public abstract void setFlash(@NonNull Flash flash);
     @NonNull public abstract Flash getFlash();
@@ -704,7 +817,7 @@ public abstract class CameraEngine implements
     public abstract boolean getPreviewFrameRateExact();
     public abstract void setPreviewFrameRate(float previewFrameRate);
     public abstract boolean supportHighSpeed();
-    public abstract Range<Integer>[] getSupportPreviewFramerate();
+    public abstract List<Integer> getSupportPreviewFramerate();
     public abstract boolean supportDuoCamera();
     public abstract boolean supportAntishake();
     public abstract void setAntishake(boolean antishakeOn);
@@ -746,5 +859,21 @@ public abstract class CameraEngine implements
     // 设置横竖屏
     public abstract void setOrientation(int orientation);
 
+    // 设置当前选择摄像头
+    public abstract void selectOpenedCamera(PointF legacyPoint);
+
+    // 获取当前是哪个摄像头
+    public abstract int getCurrentCameraIndex();
+
+    // 根据坐标获取是哪个摄像头
+    public abstract int getCurrentCameraIndex(PointF legacyPoint);
+
+    // 设置当前旋转角度
+    public abstract void setDrawRotation(int rotation);
+
+    public abstract boolean changeFaceDetection(boolean useFaceDetection);
+    public abstract void setFaceDetectionListener(final CameraEngine.FaceDetectionListener listener);
+    public abstract FACE_DETECT_MODE supportFaceDetection();
+    public abstract int getCameraOrientation();
     //endregion
 }

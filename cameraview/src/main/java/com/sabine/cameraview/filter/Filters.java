@@ -35,6 +35,9 @@ public enum Filters {
     /** @see NoFilter */
     NONE(NoFilter.class),
 
+    /** @see DualInputTextureFilter */
+    DUAL_INPUT_TEXTURE(DualInputTextureFilter.class),
+
     /** @see AutoFixFilter */
     AUTO_FIX(AutoFixFilter.class),
 

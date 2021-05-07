@@ -1,6 +1,7 @@
 package com.sabine.cameraview.preview;
 
 import android.content.Context;
+import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -18,6 +19,7 @@ import com.google.android.gms.tasks.Tasks;
 import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.engine.CameraEngine;
 import com.sabine.cameraview.engine.offset.Reference;
+import com.sabine.cameraview.filter.Filter;
 import com.sabine.cameraview.size.Size;
 
 /**
@@ -32,6 +34,8 @@ public abstract class CameraPreview<T extends View, Output> {
 
     protected final static CameraLogger LOG
             = CameraLogger.create(CameraPreview.class.getSimpleName());
+
+    public abstract void setBeauty(float parameterValue1, float parameterValue2);
 
     /**
      * This is used to notify CameraEngine to recompute its camera Preview size.
@@ -59,6 +63,8 @@ public abstract class CameraPreview<T extends View, Output> {
         void onCrop();
     }
 
+    public final static int MAX_INPUT_SURFACETEXTURE = 2;
+
     @VisibleForTesting CropCallback mCropCallback;
     private SurfaceCallback mSurfaceCallback;
     private T mView;
@@ -73,13 +79,27 @@ public abstract class CameraPreview<T extends View, Output> {
 
     // These are the preview stream dimensions, in REF_VIEW.
     @SuppressWarnings("WeakerAccess")
-    protected int mInputStreamWidth;
+    protected int mInputStreamWidth = 0;
     @SuppressWarnings("WeakerAccess")
-    protected int mInputStreamHeight;
+    protected int mInputStreamHeight = 0;
+
+    //渲染器宽高，如果mInputStreamWidth｜mInputStreamHeight大于mOutputSurfaceWidth｜mOutputSurfaceHeight，mRendererWidth(Height)=mInputStreamWidth(Height)，否则mRendererWidth(Height)=mOutputSurfaceWidth(Height)
+    protected int mRendererWidth = 0;
+    protected int mRendererHeight = 0;
 
     // The rotation, if any, to be applied when drawing.
     @SuppressWarnings("WeakerAccess")
     protected int mDrawRotation;
+
+    // 判断是否打开多摄开关标志
+    protected boolean mDualCamera;
+    protected boolean mFrontIsFirst = false;    //第一个SurfaceTexture是否是前置摄像头
+
+    public enum DualInputTextureMode {
+        UAD_MODE,   //上下布局
+        PIP_MODE,   //画中画布局
+    }
+    protected DualInputTextureMode mDualInputTextureMode = DualInputTextureMode.UAD_MODE;
 
     /**
      * Creates a new preview.
@@ -136,13 +156,27 @@ public abstract class CameraPreview<T extends View, Output> {
     /**
      * Returns the output surface object (for example a SurfaceHolder
      * or a SurfaceTexture).
+     * @param index a SurfaceTexture index, start from 1
      * @return the surface object
      */
     @NonNull
-    public abstract Output getOutput();
+    public abstract Output getOutput(int index);
 
     /**
-     * Returns the type of the output returned by {@link #getOutput()}.
+     * remove the input surface object (for example a SurfaceHolder
+     * or a SurfaceTexture).
+     * @param index a SurfaceTexture index, start from 0
+     */
+    public abstract void removeInputSurfaceTexture(int index);
+
+    /**
+     * return the input surface(for example a SurfaceHolder
+     * or a SurfaceTexture) count .
+     */
+    public abstract int getInputSurfaceTextureCount();
+
+    /**
+     * Returns the type of the output returned by {@link #getOutput(int)}.
      * @return the output type
      */
     @NonNull
@@ -158,6 +192,8 @@ public abstract class CameraPreview<T extends View, Output> {
         LOG.i("setStreamSize:", "desiredW=", width, "desiredH=", height);
         mInputStreamWidth = width;
         mInputStreamHeight = height;
+        computeRendererSize();
+
         if (mInputStreamWidth > 0 && mInputStreamHeight > 0) {
             crop(mCropCallback);
         }
@@ -191,6 +227,37 @@ public abstract class CameraPreview<T extends View, Output> {
     }
 
     /**
+     * 设置Two Camera显示模式
+     * 分为上下和画中画两种显示模式，默认上下显示.
+     * @param dualInputTextureMode 设置显示模式
+     */
+    public void setDualInputTextureMode(DualInputTextureMode dualInputTextureMode) {
+        mDualInputTextureMode = dualInputTextureMode;
+    }
+
+    /**
+     * 获取设置的Two Camera显示模式.
+     * @return 返回显示模式
+     */
+    public DualInputTextureMode getDualInputTextureMode() {
+        return mDualInputTextureMode;
+    }
+
+    public void setPreviewAspectRatio(float aspectRatio) {
+
+    }
+
+    public void setFrontIsFirst(boolean frontIsFirst) {
+        mFrontIsFirst = frontIsFirst;
+    }
+
+    public boolean frontIsFirst() {
+        return mFrontIsFirst;
+    }
+
+    public abstract boolean getFrontIsFirst();
+
+    /**
      * Subclasses can call this to notify that the surface is available.
      * @param width surface width
      * @param height surface height
@@ -215,10 +282,11 @@ public abstract class CameraPreview<T extends View, Output> {
      */
     @SuppressWarnings("WeakerAccess")
     protected final void dispatchOnSurfaceSizeChanged(int width, int height) {
-        LOG.i("dispatchOnSurfaceSizeChanged:", "w=", width, "h=", height);
+        LOG.e("dispatchOnSurfaceSizeChanged:", "w=", width, "h=", height);
         if (width != mOutputSurfaceWidth || height != mOutputSurfaceHeight) {
             mOutputSurfaceWidth = width;
             mOutputSurfaceHeight = height;
+            computeRendererSize();
             if (width > 0 && height > 0) {
                 crop(mCropCallback);
             }
@@ -345,4 +413,29 @@ public abstract class CameraPreview<T extends View, Output> {
     public void setDrawRotation(int drawRotation) {
         mDrawRotation = drawRotation;
     }
+
+    public void setDualCamera(boolean isDualCamera) {
+        mDualCamera = isDualCamera;
+    }
+
+    private void computeRendererSize() {
+        if (mInputStreamWidth>mOutputSurfaceWidth || mInputStreamHeight>mOutputSurfaceHeight) {
+            mRendererWidth = mInputStreamWidth;
+            mRendererHeight = mInputStreamHeight;
+        } else {
+            mRendererWidth = mOutputSurfaceWidth;
+            mRendererHeight = mOutputSurfaceHeight;
+        }
+    }
+    public abstract void switchInputTexture();
+    public abstract RectF getSurfaceLayoutRect(int index);
+    public abstract void resetOutputTextureDrawer();
+    public abstract void startPreview();
+    public abstract void setSensorTimestampOffset(long offset);
+
+    /**
+     * Adds a {@link RendererFpsCallback} to receive renderer fps events.
+     * @param callback a callback
+     */
+    public abstract void addRendererFpsCallback(@NonNull final RendererFpsCallback callback);
 }

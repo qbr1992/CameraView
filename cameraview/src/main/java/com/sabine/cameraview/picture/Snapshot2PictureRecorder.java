@@ -95,7 +95,7 @@ public class Snapshot2PictureRecorder extends SnapshotGlPictureRecorder {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, mOriginalAeMode);
                 builder.set(CaptureRequest.FLASH_MODE, mOriginalFlashMode);
                 holder.applyBuilder(this);
-            } catch (CameraAccessException|IllegalStateException|IllegalArgumentException ignore) {}
+            } catch (CameraAccessException ignore) {}
         }
     }
 
@@ -109,7 +109,7 @@ public class Snapshot2PictureRecorder extends SnapshotGlPictureRecorder {
                                     @NonNull Camera2Engine engine,
                                     @NonNull RendererCameraPreview preview,
                                     @NonNull AspectRatio outputRatio) {
-        super(stub, engine, preview, outputRatio, engine.getOverlay());
+        super(stub, engine, engine, preview, outputRatio, engine.getOverlay());
         mHolder = engine;
 
         mAction = Actions.sequence(

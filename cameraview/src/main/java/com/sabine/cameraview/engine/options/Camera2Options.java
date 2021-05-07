@@ -177,14 +177,17 @@ public class Camera2Options extends CameraOptions {
         }
 
         // Preview FPS
-        previewFrameRateArray = cameraCharacteristics.get(CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
-
-        if (previewFrameRateArray != null) {
+        previewFrameRateArray.clear();
+        Range<Integer>[] range = cameraCharacteristics.get(CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+        if (range != null) {
             previewFrameRateMinValue = Float.MAX_VALUE;
             previewFrameRateMaxValue = -Float.MAX_VALUE;
-            for (Range<Integer> fpsRange : previewFrameRateArray) {
+            for (Range<Integer> fpsRange : range) {
                 previewFrameRateMinValue = Math.min(previewFrameRateMinValue, fpsRange.getLower());
                 previewFrameRateMaxValue = Math.max(previewFrameRateMaxValue, fpsRange.getUpper());
+                if (fpsRange.getLower().equals(fpsRange.getUpper())) {
+                    previewFrameRateArray.add(fpsRange.getUpper());
+                }
             }
         } else {
             previewFrameRateMinValue = 0F;

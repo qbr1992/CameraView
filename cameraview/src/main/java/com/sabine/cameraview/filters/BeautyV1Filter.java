@@ -241,7 +241,17 @@ public class BeautyV1Filter implements Filter, OneParameterFilter, TwoParameterF
     }
 
     @Override
-    public void draw(long timestampUs, @NonNull float[] transformMatrix) {
+    public void setSize(int width, int height, int inputStreamWidth, int inputStreamHeight) {
+        setSize(width, height);
+    }
+
+    @Override
+    public Size getSize() {
+        return size;
+    }
+
+    @Override
+    public void draw(long timestampNs, @NonNull float[] transformMatrix) {
         synchronized (lock) {
             for (int i = 0; i < filters.size(); i++) {
                 boolean isFirst = i == 0;
@@ -270,9 +280,9 @@ public class BeautyV1Filter implements Filter, OneParameterFilter, TwoParameterF
                 // The first filter should apply all the transformations. Then,
                 // since they are applied, we should use a no-op matrix.
                 if (isFirst) {
-                    filter.draw(timestampUs, transformMatrix);
+                    filter.draw(timestampNs, transformMatrix);
                 } else {
-                    filter.draw(timestampUs, Egloo.IDENTITY_MATRIX);
+                    filter.draw(timestampNs, Egloo.IDENTITY_MATRIX);
                 }
 
                 // Set the input for the next cycle:
@@ -290,7 +300,7 @@ public class BeautyV1Filter implements Filter, OneParameterFilter, TwoParameterF
         }
     }
 
-    public void draw(long timestampUs, @NonNull float[] transformMatrix, boolean isFirstFilter, boolean isLastFilter) {
+    public void draw(long timestampNs, @NonNull float[] transformMatrix, boolean isFirstFilter, boolean isLastFilter) {
         synchronized (lock) {
             for (int i = 0; i < filters.size(); i++) {
                 boolean isFirst = ((i == 0) && isFirstFilter);
@@ -321,9 +331,9 @@ public class BeautyV1Filter implements Filter, OneParameterFilter, TwoParameterF
                 // The first filter should apply all the transformations. Then,
                 // since they are applied, we should use a no-op matrix.
                 if (isFirst) {
-                    filter.draw(timestampUs, transformMatrix);
+                    filter.draw(timestampNs, transformMatrix);
                 } else {
-                    filter.draw(timestampUs, Egloo.IDENTITY_MATRIX);
+                    filter.draw(timestampNs, Egloo.IDENTITY_MATRIX);
                 }
 
                 // Set the input for the next cycle:
@@ -378,6 +388,29 @@ public class BeautyV1Filter implements Filter, OneParameterFilter, TwoParameterF
     @Override
     public void setInputImageTexture0(GlTexture glTexture) {
         inputImageTexture0 = glTexture;
+    }
+
+    @Override
+    public void setSecondTexture(GlTexture secondTexture, float frontIsFirst) {
+    }
+
+    @Override
+    public void setSecondTexture(GlTexture secondTexture, float frontIsFirst, float drawRotation) {
+    }
+
+    @Override
+    public void setDualInputTextureMode(float inputTextureMode) {
+
+    }
+
+    @Override
+    public void setAspectRatio(float aspectRatio) {
+
+    }
+
+    @Override
+    public offscreenTexture getLastOutputTextureId() {
+        return null;
     }
 
     @Override

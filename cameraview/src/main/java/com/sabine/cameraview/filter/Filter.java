@@ -2,8 +2,10 @@ package com.sabine.cameraview.filter;
 
 import androidx.annotation.NonNull;
 
+import com.otaliastudios.opengl.texture.GlFramebuffer;
 import com.otaliastudios.opengl.texture.GlTexture;
 import com.sabine.cameraview.CameraView;
+import com.sabine.cameraview.size.Size;
 
 import java.io.File;
 
@@ -29,6 +31,12 @@ import java.io.File;
  * map the filter parameter to gestures.
  */
 public interface Filter {
+
+    static class offscreenTexture {
+        public GlFramebuffer outputFramebuffer = null;
+        public GlTexture outputFramebufferTexture = null;
+        public long timestampNs;
+    }
 
     /**
      * Returns a String containing the vertex shader.
@@ -68,18 +76,30 @@ public interface Filter {
      * Called to render the actual texture. The given transformation matrix
      * should be applied.
      *
-     * @param timestampUs timestamp in microseconds
+     * @param timestampNs timestamp in nanosecond
      * @param transformMatrix matrix
      */
-    void draw(long timestampUs, @NonNull float[] transformMatrix);
+    void draw(long timestampNs, @NonNull float[] transformMatrix);
 
     /**
      * Called anytime the output size changes.
      *
-     * @param width width
-     * @param height height
+     * @param width output surfacetext width
+     * @param height output surfacetext height
      */
     void setSize(int width, int height);
+
+    /**
+     * Called anytime the output size changes.
+     *
+     * @param width output surfacetext width
+     * @param height output surfacetext height
+     * @param inputStreamWidth input stream width
+     * @param inputStreamHeight input stream height
+     */
+    void setSize(int width, int height, int inputStreamWidth, int inputStreamHeight);
+
+    Size getSize();
 
     /**
      * Clones this filter creating a new instance of it.
@@ -92,4 +112,9 @@ public interface Filter {
     Filter copy();
 
     void setInputImageTexture0(GlTexture glTexture);
+    void setSecondTexture(GlTexture secondTexture, float frontIsFirst);
+    void setSecondTexture(GlTexture secondTexture, float frontIsFirst, float drawRotation);
+    void setDualInputTextureMode(float inputTextureMode);
+    void setAspectRatio(float aspectRatio);
+    offscreenTexture getLastOutputTextureId();
 }

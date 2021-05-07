@@ -2,7 +2,6 @@ package com.sabine.cameraview;
 
 
 import android.graphics.ImageFormat;
-import android.util.Range;
 
 import androidx.annotation.NonNull;
 
@@ -56,7 +55,7 @@ public abstract class CameraOptions {
     protected float previewFrameRateMinValue;
     protected float previewFrameRateMaxValue;
 
-    protected Range<Integer>[] previewFrameRateArray;
+    protected List<Integer> previewFrameRateArray = new ArrayList<>();
 
     protected CameraOptions() { }
 
@@ -332,7 +331,7 @@ public abstract class CameraOptions {
      *
      * @return the preview array
      */
-    public final Range<Integer>[] getPreviewFrameRateArray() {
+    public final List<Integer> getPreviewFrameRateArray() {
         return previewFrameRateArray;
     }
 

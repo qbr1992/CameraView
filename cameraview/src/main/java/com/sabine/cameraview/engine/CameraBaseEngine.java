@@ -2,8 +2,6 @@ package com.sabine.cameraview.engine;
 
 import android.content.res.Configuration;
 import android.location.Location;
-import android.util.Log;
-import android.util.Range;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
@@ -25,13 +23,13 @@ import com.sabine.cameraview.controls.PictureFormat;
 import com.sabine.cameraview.controls.VideoCodec;
 import com.sabine.cameraview.controls.WhiteBalance;
 import com.sabine.cameraview.engine.offset.Angles;
-import com.sabine.cameraview.engine.offset.Axis;
 import com.sabine.cameraview.engine.offset.Reference;
 import com.sabine.cameraview.engine.orchestrator.CameraState;
 import com.sabine.cameraview.frame.FrameManager;
 import com.sabine.cameraview.overlay.Overlay;
 import com.sabine.cameraview.picture.PictureRecorder;
 import com.sabine.cameraview.preview.CameraPreview;
+import com.sabine.cameraview.preview.RendererFpsCallback;
 import com.sabine.cameraview.size.AspectRatio;
 import com.sabine.cameraview.size.Size;
 import com.sabine.cameraview.size.SizeSelector;
@@ -79,7 +77,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
 //    @Nullable private Size mPreviewStreamSize;
     protected Size mPictureSize;
     protected Size mVideoSize;
-    protected Facing mFacing = Facing.FRONT;
+    protected Facing[] mFacing = {Facing.FRONT};
     private Mode mMode;
     private Audio mAudio;
     private int mVideoBitRate;
@@ -92,7 +90,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     private int mFrameProcessingPoolSize;
     private Overlay mOverlay;
     boolean supportHighSpeed = false;
-    boolean supportDuoCamera = false;
+    protected int supportDuoCamera = -1;  //-1:unknown; 0:unsupport; 1:support;
     boolean antishakeOn = false;
 
     int mOritation = Configuration.ORIENTATION_PORTRAIT;
@@ -163,6 +161,12 @@ public abstract class CameraBaseEngine extends CameraEngine {
         if (mPreview != null) mPreview.setSurfaceCallback(null);
         mPreview = cameraPreview;
         mPreview.setSurfaceCallback(this);
+        mPreview.addRendererFpsCallback(new RendererFpsCallback() {
+            @Override
+            public void onRendererFps(int fps) {
+                getCallback().dispatchOnVideoFps(fps);
+            }
+        });
     }
 
     @NonNull
@@ -196,6 +200,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @Override
     public final void setPictureSize(@NonNull Size pictureSize) {
         mPictureSize = pictureSize;
+        mCaptureSize = computeCaptureSize();
     }
 
     @NonNull
@@ -205,8 +210,11 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
-    public final void setVideoSize(@NonNull Size videoSize) {
+    public final void setVideoSize(@NonNull Size videoSize, boolean isRestart) {
         mVideoSize = videoSize;
+        if (isRestart) {
+            restartBind();
+        }
     }
 
     @NonNull
@@ -324,29 +332,65 @@ public abstract class CameraBaseEngine extends CameraEngine {
      * Sets a new facing value. This will restart the engine session (if there's any)
      * so that we can open the new facing camera.
      * @param facing facing
+     * @param firstCameraIndex 预览/录制显示的视频从firstCameraIndex索引的camera开始.
      */
     @Override
-    public final void setFacing(final @NonNull Facing facing) {
-        final Facing old = mFacing;
-        if (facing != old) {
-            mFacing = facing;
-            getOrchestrator().scheduleStateful("facing", CameraState.ENGINE,
-                    new Runnable() {
-                @Override
-                public void run() {
-                    if (collectCameraInfo(facing)) {
-                        restart();
-                    } else {
-                        mFacing = old;
+    public final void setFacing(final @NonNull Facing[] facing, final int firstCameraIndex) {
+//        final Facing old = mFacing;
+        boolean isChanged = facing.length != mFacing.length;
+        if (!isChanged) {
+            for (Facing facing1 : facing) {
+                boolean isFind = false;
+                for (Facing facing2 : mFacing) {
+                    if (facing1 == facing2) {
+                        isFind = true;
+                        break;
                     }
                 }
-            });
+                if (!isFind) {
+                    isChanged = true;
+                    break;
+                }
+            }
+        }
+
+        if ((isChanged || getOrchestrator().getCurrentState() != CameraState.PREVIEW) && isOpenCamera()) {
+//            mFacing = facing;
+            if (getOrchestrator().getCurrentState() == CameraState.OFF) {
+                getOrchestrator().scheduleStateful("facing", CameraState.OFF,
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                if (collectCameraInfo(facing)) {
+                                    mFacing = facing;
+                                    mFirstCameraIndex = firstCameraIndex;
+                                    start(mFirstCameraIndex);
+                                }/* else {
+                        mFacing = old;
+                    }*/
+                            }
+                        });
+            } else {
+                getOrchestrator().scheduleStateful("facing", CameraState.ENGINE,
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                if (collectCameraInfo(facing)) {
+                                    mFacing = facing;
+                                    mFirstCameraIndex = firstCameraIndex;
+                                    restart();
+                                }/* else {
+                        mFacing = old;
+                    }*/
+                            }
+                        });
+            }
         }
     }
 
     @NonNull
     @Override
-    public final Facing getFacing() {
+    public final Facing[] getFacing() {
         return mFacing;
     }
 
@@ -357,7 +401,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
 
     @Override
     public boolean supportDuoCamera() {
-        return supportDuoCamera;
+        return supportDuoCamera == 1;
     }
 
     @Override
@@ -417,13 +461,13 @@ public abstract class CameraBaseEngine extends CameraEngine {
         return mMode;
     }
 
-    @Override
-    public final float getZoomValue() {
-        return mZoomValue;
-    }
+//    @Override
+//    public final float getZoomValue() {
+//        return mZoomValue;
+//    }
 
     @Override
-    public final float getExposureCorrectionValue() {
+    public float getExposureCorrectionValue() {
         return mExposureCorrectionValue;
     }
 
@@ -628,12 +672,9 @@ public abstract class CameraBaseEngine extends CameraEngine {
                 stub.videoBitRate = mVideoBitRate;
                 stub.audioBitRate = mAudioBitRate;
                 stub.size = size;
-                if (isFlip) {
-                    stub.scaleX = getAngles().flip(Reference.SENSOR, Reference.OUTPUT) ? -1.0f : 1.0f;
-                    stub.scaleY = getAngles().flip(Reference.SENSOR, Reference.OUTPUT) ? 1.0f : -1.0f;
-                } else {
-                    stub.scaleX = 1.0f;
-                    stub.scaleY = 1.0f;
+                stub.scaleX = 1.0f;
+                if (isFlip && !dual()) {
+                    stub.scaleX = -1.0f;
                 }
                 //noinspection ConstantConditions
                 AspectRatio ratio = AspectRatio.of(getPreviewSurfaceSize(Reference.OUTPUT));
@@ -644,7 +685,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
 
     @Override
     public final void stopVideo(final boolean isCameraShutdown) {
-        LOG.w(TAG, "stopVideo");
+        LogUtil.w(TAG, "stopVideo");
         getOrchestrator().schedule("stop video", true, new Runnable() {
             @Override
             public void run() {
@@ -658,7 +699,7 @@ public abstract class CameraBaseEngine extends CameraEngine {
     @EngineThread
     @SuppressWarnings("WeakerAccess")
     protected void onStopVideo(boolean isCameraShutdown) {
-        LOG.w(TAG, "onStopVideo");
+        LogUtil.w(TAG, "onStopVideo");
         if (mVideoRecorder != null) {
             mVideoRecorder.stop(isCameraShutdown);
             // Do not null this, so we respond correctly to isTakingVideo(),
@@ -681,8 +722,13 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
-    public void onVideoRecordingStart() {
-        getCallback().dispatchOnVideoRecordingStart();
+    public void onVideoFps(int fps) {
+        getCallback().dispatchOnVideoFps(fps);
+    }
+
+    @Override
+    public void onVideoRecordingStart(long timestamp) {
+        getCallback().dispatchOnVideoRecordingStart(timestamp);
     }
 
     @Override
@@ -716,12 +762,13 @@ public abstract class CameraBaseEngine extends CameraEngine {
 
     @Override
     public final void onSurfaceChanged() {
-        LOG.i("onSurfaceChanged:", "Size is", getPreviewSurfaceSize(Reference.VIEW));
+        LOG.e("onSurfaceChanged:", "Size is", getPreviewSurfaceSize(Reference.VIEW));
         getOrchestrator().scheduleStateful("surface changed", CameraState.BIND,
                 new Runnable() {
             @Override
             public void run() {
                 // Compute a new camera preview size and apply.
+                mCaptureSize = computeCaptureSize();
                 Size newSize = computePreviewStreamSize();
                 if (newSize.equals(mPreviewStreamSize)) {
                     LOG.i("onSurfaceChanged:",
@@ -863,8 +910,8 @@ public abstract class CameraBaseEngine extends CameraEngine {
 //            throw new RuntimeException("SizeSelectors must not return Sizes other than " +
 //                    "those in the input list.");
 //        }
-        LOG.e("computeCaptureSize:", "computePreviewStreamSize result:", result, "flip:", flip, "mode:", mode);
-        if (flip) result = result.flip(); // Go back to REF_SENSOR
+        LOG.e("computeCaptureSize:", "computePreviewStreamSize result:", result, "flip:", flip, "mode:", mode, "mVideoSize:", mVideoSize, "mPictureSize:", mPictureSize);
+        if (flip && result != null) result = result.flip(); // Go back to REF_SENSOR
         return result;
     }
 
@@ -885,10 +932,13 @@ public abstract class CameraBaseEngine extends CameraEngine {
         @NonNull List<Size> previewSizes = getPreviewStreamAvailableSizes();
         // These sizes come in REF_SENSOR. Since there is an external selector involved,
         // we must convert all of them to REF_VIEW, then flip back when returning.
+        if (previewSizes == null)
+            return new Size(1920, 1080);
+
         boolean flip = true;
         List<Size> sizes = new ArrayList<>(previewSizes.size());
         for (Size size : previewSizes) {
-            Log.e(TAG, "computePreviewStreamSize: " + size);
+            LOG.e( "computePreviewStreamSize: " + size);
             sizes.add(flip ? size.flip() : size);
         }
 
@@ -903,6 +953,8 @@ public abstract class CameraBaseEngine extends CameraEngine {
         LOG.e("computePreviewStreamSize:",
                 "targetRatio:", targetRatio,
                 "targetMinSize:", targetMinSize);
+        if (mPreview != null)
+            mPreview.setPreviewAspectRatio((targetRatio.getY()*1.0f)/targetRatio.getX());
         SizeSelector matchRatio = SizeSelectors.and( // Match this aspect ratio and sort by biggest
                 SizeSelectors.aspectRatio(targetRatio, 0),
                 SizeSelectors.smallest());
@@ -1006,9 +1058,13 @@ public abstract class CameraBaseEngine extends CameraEngine {
     }
 
     @Override
-    public Range<Integer>[] getSupportPreviewFramerate() {
-        if (mCameraOptions != null) return mCameraOptions.getPreviewFrameRateArray();
-        return null;
+    public List<Integer> getSupportPreviewFramerate() {
+        return mCameraOptions.getPreviewFrameRateArray();
+    }
+
+    @Override
+    public void setDrawRotation(int rotation) {
+        if (mPreview != null) mPreview.setDrawRotation(rotation);
     }
 
     //endregion

@@ -2,6 +2,7 @@ package com.sabine.cameraview.preview;
 
 import android.content.Context;
 import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.view.LayoutInflater;
 import android.view.TextureView;
@@ -25,6 +26,11 @@ import java.util.concurrent.ExecutionException;
 public class TextureCameraPreview extends CameraPreview<TextureView, SurfaceTexture> {
 
     private View mRootView;
+
+    @Override
+    public void setBeauty(float parameterValue1, float parameterValue2) {
+
+    }
 
     public TextureCameraPreview(@NonNull Context context, @NonNull ViewGroup parent) {
         super(context, parent);
@@ -75,10 +81,25 @@ public class TextureCameraPreview extends CameraPreview<TextureView, SurfaceText
         return SurfaceTexture.class;
     }
 
+    @Override
+    public boolean getFrontIsFirst() {
+        return false;
+    }
+
     @NonNull
     @Override
-    public SurfaceTexture getOutput() {
+    public SurfaceTexture getOutput(int index) {
         return getView().getSurfaceTexture();
+    }
+
+    @Override
+    public void removeInputSurfaceTexture(int index) {
+
+    }
+
+    @Override
+    public int getInputSurfaceTextureCount() {
+        return 1;
     }
 
     @Override
@@ -144,5 +165,35 @@ public class TextureCameraPreview extends CameraPreview<TextureView, SurfaceText
         try {
             Tasks.await(task.getTask());
         } catch (InterruptedException | ExecutionException ignore) { }
+    }
+
+    @Override
+    public void switchInputTexture() {
+
+    }
+
+    @Override
+    public RectF getSurfaceLayoutRect(int index) {
+        return new RectF(0, 0, getView().getWidth(), getView().getHeight());
+    }
+
+    @Override
+    public void resetOutputTextureDrawer() {
+
+    }
+
+    @Override
+    public void startPreview() {
+
+    }
+
+    @Override
+    public void setSensorTimestampOffset(long offset) {
+
+    }
+
+    @Override
+    public void addRendererFpsCallback(@NonNull RendererFpsCallback callback) {
+
     }
 }

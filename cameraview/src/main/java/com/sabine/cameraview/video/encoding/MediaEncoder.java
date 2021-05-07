@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.CallSuper;
@@ -124,7 +125,7 @@ public abstract class MediaEncoder {
 
     MediaFormat mediaFormat;
 
-    private MediaEncoderEngine.Controller mController;
+    protected MediaEncoderEngine.Controller mController;
     private OutputBufferPool mOutputBufferPool;
     private MediaCodec.BufferInfo mBufferInfo;
     private MediaCodecBuffers mBuffers;
@@ -238,16 +239,18 @@ public abstract class MediaEncoder {
     @SuppressWarnings("ConstantConditions")
     final void notify(final @NonNull String event, final @Nullable Object data) {
         if (!mPendingEvents.containsKey(event)) mPendingEvents.put(event,
-                 new AtomicInteger(0));
+                new AtomicInteger(0));
         final AtomicInteger pendingEvents = mPendingEvents.get(event);
         pendingEvents.incrementAndGet();
-        LOG.i(mName, "Notify was called. Posting. pendingEvents:", pendingEvents.intValue());
+//        if (mName.equalsIgnoreCase("VideoEncoder"))
+//        LOG.e(mName, "Notify was called. Posting. pendingEvents:", pendingEvents.intValue());
 //        if (pendingEvents.intValue() > 2) LogUtil.w(mName, "pendingEvents.intValue() === " + pendingEvents.intValue());
         WorkerHandler.get(mName).post(new Runnable() {
             @Override
             public void run() {
-                LOG.i(mName, "Notify was called. Executing. pendingEvents:",
-                        pendingEvents.intValue());
+//                if (mName.equalsIgnoreCase("VideoEncoder"))
+//                    LOG.e(mName, "Notify was called. Executing. pendingEvents:",
+//                            pendingEvents.intValue(), event, ((TextureMediaEncoder.Frame) data).timestampNanos);
                 onEvent(event, data);
                 pendingEvents.decrementAndGet();
             }
@@ -265,15 +268,15 @@ public abstract class MediaEncoder {
      */
     final void stop() {
         if (mState >= STATE_STOPPING) {
-            LOG.w(mName, "Wrong state while stopping. Aborting." + mState);
+            LogUtil.w(mName, "Wrong state while stopping. Aborting." + mState);
             return;
         }
         setState(STATE_STOPPING);
-        LOG.e(mName, "Stop was called. Posting.");
+        LogUtil.e(mName, "Stop was called. Posting.");
         mWorker.post(new Runnable() {
             @Override
             public void run() {
-                LOG.e(mName, "Stop was called. Executing.");
+                LogUtil.e(mName, "Stop was called. Executing.");
                 onStop();
             }
         });
@@ -412,6 +415,7 @@ public abstract class MediaEncoder {
     @SuppressLint("LogNotTimber")
     @SuppressWarnings("WeakerAccess")
     protected final void drainOutput(boolean drainAll) {
+        boolean isVideo = mName.equals(NAME_VIDEO);
         LOG.i(mName, "DRAINING - EOS:", drainAll);
         if (mMediaCodec == null) {
             LOG.e("drain() was called before prepare() or after releasing.");
@@ -421,11 +425,75 @@ public abstract class MediaEncoder {
             mBuffers = new MediaCodecBuffers(mMediaCodec);
         }
         while (true) {
+//            long time1 = isVideo?SystemClock.elapsedRealtime():0;
             int encoderStatus = mMediaCodec.dequeueOutputBuffer(mBufferInfo, OUTPUT_TIMEOUT_US);
+//            long time2 = isVideo?SystemClock.elapsedRealtime():0;
             LOG.v(mName, "DRAINING - Got status:", encoderStatus);
-            if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
+            if (encoderStatus >= 0) {
+//                long time3 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                ByteBuffer encodedData = mBuffers.getOutputBuffer(encoderStatus);
+
+//                long time4 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                // Codec config means that config data was pulled out and fed to the muxer
+                // when we got the INFO_OUTPUT_FORMAT_CHANGED status. Ignore it.
+                boolean isCodecConfig = (mBufferInfo.flags
+                        & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0;
+
+//                long time5, time6, time7, time8;
+//                time6 = time7 = time8 = time5 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                if (isCodecConfig) {
+//                    time6 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                    OutputBuffer buffer = mOutputBufferPool.get();
+                    //noinspection ConstantConditions
+                    buffer.info = mBufferInfo;
+                    buffer.isVideo = mName.equals(NAME_VIDEO);
+                    buffer.data = encodedData;
+//                    time7 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                    onWriteOutput(mOutputBufferPool, buffer, true);
+//                    time8 = isVideo ? SystemClock.elapsedRealtime() : 0;
+//                    byte[] bytes = new byte[buffer.data.remaining()];
+//                    buffer.data.get(bytes);
+                } else if (mController.isStarted() && mBufferInfo.size != 0) {
+
+                    // adjust the ByteBuffer values to match BufferInfo (not needed?)
+                    if (mBufferInfo.offset != 0) {
+                        encodedData.position(mBufferInfo.offset);
+                        encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
+                    }
+//                    time6 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                    // Write.
+//                    LOG.v(mName, "DRAINING - About to write(). Adjusted presentation:",
+//                            mBufferInfo.presentationTimeUs);
+                    OutputBuffer buffer = mOutputBufferPool.get();
+                    //noinspection ConstantConditions
+                    buffer.info = mBufferInfo;
+                    buffer.isVideo = mName.equals(NAME_VIDEO);
+                    buffer.data = encodedData;
+//                    time7 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                    onWriteOutput(mOutputBufferPool, buffer, false);
+//                    time8 = isVideo ? SystemClock.elapsedRealtime() : 0;
+                }
+                mMediaCodec.releaseOutputBuffer(encoderStatus, false);
+//                long time9 = isVideo ? SystemClock.elapsedRealtime() : 0;
+//                if (isVideo)
+//                    LOG.e(mName, mBufferInfo.presentationTimeUs, "drainOutput time:", "|", time2 - time1, "|", time3 - time2, "|", time4 - time3, "|", time5 - time4, "|", time6 - time5, "|", time7 - time6, "|", time8 - time7, "|", time9 - time8, "|", mBufferInfo.offset, mBufferInfo.size);
+
+                // Check for the EOS flag so we can call onStopped.
+                if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                    LOG.e(mName, "drainOutput: DRAINING - Got EOS. Releasing the codec.");
+                    onStopped();
+                    break;
+                }
+            } else if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 // no output available yet
+//                if (isVideo)
+//                    LOG.e(mName, "MediaEncoder", "step 1 time:", time2-time1);
                 if (!drainAll) break; // out of while
+                try {
+                    Thread.sleep(15);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
             } else if (encoderStatus == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
                 // not expected for an encoder
@@ -441,50 +509,9 @@ public abstract class MediaEncoder {
                 mController.notifyStarted(mediaFormat/*, mLastTimeUs, mName.equals("VideoEncoder")*/);
                 setState(STATE_STARTED);
                 if (mOutputBufferPool == null) mOutputBufferPool = new OutputBufferPool();
-            } else if (encoderStatus < 0) {
+            } else {
                 LogUtil.e(mName, "Unexpected result from dequeueOutputBuffer: " + encoderStatus);
                 // let's ignore it
-            } else {
-                ByteBuffer encodedData = mBuffers.getOutputBuffer(encoderStatus);
-
-                // Codec config means that config data was pulled out and fed to the muxer
-                // when we got the INFO_OUTPUT_FORMAT_CHANGED status. Ignore it.
-                boolean isCodecConfig = (mBufferInfo.flags
-                        & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0;
-
-                if (isCodecConfig) {
-                    OutputBuffer buffer = mOutputBufferPool.get();
-                    //noinspection ConstantConditions
-                    buffer.info = mBufferInfo;
-                    buffer.isVideo = mName.equals(NAME_VIDEO);
-                    buffer.data = encodedData;
-                    onWriteOutput(mOutputBufferPool, buffer, true);
-//                    byte[] bytes = new byte[buffer.data.remaining()];
-//                    buffer.data.get(bytes);
-                } else if (mController.isStarted() && mBufferInfo.size != 0) {
-
-                    // adjust the ByteBuffer values to match BufferInfo (not needed?)
-                    encodedData.position(mBufferInfo.offset);
-                    encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
-
-                    // Write.
-                    LOG.v(mName, "DRAINING - About to write(). Adjusted presentation:",
-                            mBufferInfo.presentationTimeUs);
-                    OutputBuffer buffer = mOutputBufferPool.get();
-                    //noinspection ConstantConditions
-                    buffer.info = mBufferInfo;
-                    buffer.isVideo = mName.equals(NAME_VIDEO);
-                    buffer.data = encodedData;
-                    onWriteOutput(mOutputBufferPool, buffer, false);
-                }
-                mMediaCodec.releaseOutputBuffer(encoderStatus, false);
-
-                // Check for the EOS flag so we can call onStopped.
-                if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    LOG.e(mName, "drainOutput: DRAINING - Got EOS. Releasing the codec.");
-                    onStopped();
-                    break;
-                }
             }
         }
     }

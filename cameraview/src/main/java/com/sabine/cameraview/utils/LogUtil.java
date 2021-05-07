@@ -3,7 +3,6 @@ package com.sabine.cameraview.utils;
 import android.os.Environment;
 import android.system.ErrnoException;
 import android.system.Os;
-import android.text.TextUtils;
 import android.util.Log;
 
 import java.io.BufferedWriter;
@@ -31,8 +30,6 @@ public class LogUtil {
     private static String MYLOG_PATH_SDCARD_DIR = "log";// 日志文件在sdcard中的路径
     private static int SDCARD_LOG_FILE_SAVE_DAYS = 3;// sd卡中日志文件的最多保存3天
     private static String MYLOGFILEName = "SmartMike+_log.txt";// 本类输出的日志文件名
-    private static String logBaseDir = "";
-    private static String logFileName = "";
     private static SimpleDateFormat myLogSdf = new SimpleDateFormat(
             "yyyy-MM-dd HH:mm:ss");// 日志的输出格式
     private static SimpleDateFormat logfile = new SimpleDateFormat("yyyy-MM-dd");// 日志文件格式
@@ -104,46 +101,18 @@ public class LogUtil {
         }
     }
 
-    private static String getLogBasePath() {
+    private static String getLogPath() {
+        String path = "";
+        // 获取扩展SD卡设备状态
+        String sDStateString = android.os.Environment.getExternalStorageState();
 
-        if (!TextUtils.isEmpty(logBaseDir)) {
-            return logBaseDir;
-        } else {
-            String path = "";
-            // 获取扩展SD卡设备状态
-            String sDStateString = android.os.Environment.getExternalStorageState();
-
-            // 拥有可读可写权限
-            if (sDStateString.equals(android.os.Environment.MEDIA_MOUNTED)) {
-                // 获取扩展存储设备的文件目录
-                path = Environment.getExternalStorageDirectory() + File.separator + "SmartMike" + File.separator
-                        + MYLOG_PATH_SDCARD_DIR;
-            }
-            return path;
+        // 拥有可读可写权限
+        if (sDStateString.equals(android.os.Environment.MEDIA_MOUNTED)) {
+            // 获取扩展存储设备的文件目录
+            path = Environment.getExternalStorageDirectory() + File.separator + "SmartMike" + File.separator
+                    + MYLOG_PATH_SDCARD_DIR;
         }
-    }
-
-    private static File getLogFile() {
-        File file = null;
-        if (!TextUtils.isEmpty(logFileName)) {
-            file = new File(getLogBasePath() + File.separator + logFileName);
-            if (!file.exists()) createNewFile(file);
-        } else {
-            String path = "";
-            // 获取扩展SD卡设备状态
-            String sDStateString = android.os.Environment.getExternalStorageState();
-
-            // 拥有可读可写权限
-            if (sDStateString.equals(android.os.Environment.MEDIA_MOUNTED)) {
-                // 获取扩展存储设备的文件目录
-                Date nowtime = new Date();
-                String needWriteFiel = logfile.format(nowtime);
-                path = getLogBasePath() + File.separator + needWriteFiel + MYLOGFILEName;
-                file = new File(path);
-                if (!file.exists()) createNewFile(file);
-            }
-        }
-        return file;
+        return path;
 
     }
 
@@ -154,13 +123,21 @@ public class LogUtil {
      * **/
     private static void writeLogtoFile(String mylogtype, String tag, String text) {// 新建或打�??日志文件
         Date nowtime = new Date();
+        String needWriteFiel = logfile.format(nowtime);
         String needWriteMessage = myLogSdf.format(nowtime) + "    " + mylogtype
                 + "    " + tag + "    " + text;
 
         // 取得日志存放目录
-        File file = getLogFile();
-        if (file != null && file.exists()) {
+        String path = getLogPath();
+        if (path != null && !"".equals(path)) {
             try {
+                // 创建目录
+                File dir = new File(path);
+                if (!dir.exists())
+                    dir.mkdir();
+                // 打开文件
+                File file = new File(path + File.separator + needWriteFiel
+                        + MYLOGFILEName);
                 FileWriter filerWriter = new FileWriter(file, true);// 后面这个参数代表是不是要接上文件中原来的数据，不进行覆盖
                 BufferedWriter bufWriter = new BufferedWriter(filerWriter);
                 bufWriter.write(needWriteMessage);
@@ -177,17 +154,15 @@ public class LogUtil {
 
     /**
      * 删除指定的日志文件
-     * @param day 要删除的截止日期(几天前)
      * */
-    public static void delFile(int day) {// 删除日志文件
+    public static void delFile() {// 删除日志文件
         // 取得日志存放目录
-        SDCARD_LOG_FILE_SAVE_DAYS = day;
-        File baseDir = new File(getLogBasePath());
+        File baseDir = new File(getLogPath());
         if (baseDir.exists() && baseDir.isDirectory()) {
             String[] logPath = baseDir.list();
             if (logPath != null) {
                 for (String s : logPath) {
-                    File logFile = new File(getLogBasePath() + File.separator + s);
+                    File logFile = new File(getLogPath() + File.separator + s);
                     if (!logFile.exists()) continue;
                     long l = logFile.lastModified();
                     Date date = new Date(l);
@@ -209,35 +184,6 @@ public class LogUtil {
         now.set(Calendar.DATE, now.get(Calendar.DATE)
                 - SDCARD_LOG_FILE_SAVE_DAYS);
         return now.getTime();
-    }
-
-    public static void setLogFilePath(String logBaseDir, String logFileName) {
-        LogUtil.logBaseDir = logBaseDir;
-        LogUtil.logFileName = logFileName;
-    }
-
-    /**
-     * 创建文件
-     *
-     * @param newFile
-     * @return
-     */
-    public static boolean createNewFile(File newFile) {
-        if (!newFile.getParentFile().getParentFile().exists())
-            newFile.getParentFile().getParentFile().mkdirs();
-        if (!newFile.getParentFile().exists())
-            newFile.getParentFile().mkdirs();
-        if (newFile.exists())
-            newFile.delete();
-        if (!newFile.exists()) {
-            try {
-                newFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-                return false;
-            }
-        }
-        return true;
     }
 
 }

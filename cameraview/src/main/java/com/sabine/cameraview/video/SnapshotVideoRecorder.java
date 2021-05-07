@@ -2,12 +2,16 @@ package com.sabine.cameraview.video;
 
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
+import android.opengl.EGLContext;
 import android.os.Build;
+import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
+import com.otaliastudios.opengl.texture.GlTexture;
 import com.sabine.cameraview.CameraLogger;
 import com.sabine.cameraview.VideoResult;
 import com.sabine.cameraview.controls.Audio;
@@ -19,6 +23,7 @@ import com.sabine.cameraview.overlay.Overlay;
 import com.sabine.cameraview.overlay.OverlayDrawer;
 import com.sabine.cameraview.preview.GlCameraPreview;
 import com.sabine.cameraview.preview.RendererCameraPreview;
+import com.sabine.cameraview.preview.RendererFpsCallback;
 import com.sabine.cameraview.preview.RendererFrameCallback;
 import com.sabine.cameraview.preview.RendererThread;
 import com.sabine.cameraview.size.Size;
@@ -51,6 +56,7 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
 
     private static final int STATE_RECORDING = 0;
     private static final int STATE_NOT_RECORDING = 1;
+    private static final int STATE_INITIALIZING = 2;
 
     private MediaEncoderEngine mEncoderEngine;
     private AudioMediaEncoder audioMediaEncoder;
@@ -60,13 +66,16 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
 
     private int mCurrentState = STATE_NOT_RECORDING;
     private int mDesiredState = STATE_NOT_RECORDING;
-    private int mTextureId = 0;
+    private int mTextureId;
+    private boolean mFrontIsFirst;
 
     private Overlay mOverlay;
     private OverlayDrawer mOverlayDrawer;
     private boolean mHasOverlay;
 
     private Filter mCurrentFilter;
+
+    private long startTimestamp = 0;
 
     public SnapshotVideoRecorder(@NonNull CameraEngine engine,
                                  @NonNull GlCameraPreview preview,
@@ -87,6 +96,11 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
     protected void onStart() {
         mDesiredState = STATE_RECORDING;
         mPreview.addRendererFrameCallback(this);
+    }
+
+    @Override
+    public void setScaleCrop(float scaleX, float scaleY) {
+        if (textureMediaEncoder != null) textureMediaEncoder.setScaleCrop(scaleX, scaleY);
     }
 
     // Can be called different threads
@@ -110,8 +124,9 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
 
     @RendererThread
     @Override
-    public void onRendererTextureCreated(int textureId) {
+    public void onRendererTextureCreated(int textureId, boolean frontIsFirst) {
         mTextureId = textureId;
+        mFrontIsFirst = frontIsFirst;
         if (mHasOverlay) {
             mOverlayDrawer = new OverlayDrawer(mOverlay, mResult.size);
         }
@@ -120,175 +135,207 @@ public class SnapshotVideoRecorder extends VideoRecorder implements RendererFram
     @RendererThread
     @Override
     public void onRendererFilterChanged(@NonNull Filter filter, float filterLevel) {
-        mCurrentFilter = filter.copy();
-        mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getHeight());
+//        mCurrentFilter = filter.copy();
+//        mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getHeight());
+//        synchronized (mEncoderEngineLock) {
+//            if (mEncoderEngine != null) {
+//                mEncoderEngine.notify(TextureMediaEncoder.FILTER_EVENT, mCurrentFilter);
+//                if (textureMediaEncoder != null) textureMediaEncoder.setFileterLevel(filterLevel);
+//            }
+//        }
+    }
+
+    @Override
+    public void onRendererInputTextureIdChanged(@NonNull int textureId) {
+        if (textureMediaEncoder != null) textureMediaEncoder.changeInputTextureId(textureId);
+    }
+
+    @Override
+    public void onRendererSwitchInputTexture() {
         synchronized (mEncoderEngineLock) {
             if (mEncoderEngine != null) {
-                mEncoderEngine.notify(TextureMediaEncoder.FILTER_EVENT, mCurrentFilter);
-                if (textureMediaEncoder != null) textureMediaEncoder.setFileterLevel(filterLevel);
+                if (textureMediaEncoder != null) textureMediaEncoder.switchInputTexture();
             }
         }
     }
 
     @RendererThread
     @Override
-    public void onRendererFrame(@NonNull SurfaceTexture surfaceTexture, int rotation,
-                                float scaleX, float scaleY) {
+    public void onRendererFrame(@NonNull SurfaceTexture surfaceTexture, final long timestampNanos, final int rotation,
+                                final float scaleX, final float scaleY, final GlTexture inputTextureId) {
         if (mCurrentState == STATE_NOT_RECORDING && mDesiredState == STATE_RECORDING) {
-            LOG.i("Starting the encoder engine.");
+            mCurrentState = STATE_INITIALIZING;
+            final EGLContext eglContext = EGL14.eglGetCurrentContext();
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    LOG.e("Starting the encoder engine.");
 
-            // Set default options
-            if (mResult.videoFrameRate <= 0) mResult.videoFrameRate = DEFAULT_VIDEO_FRAMERATE;
-            if (mResult.videoBitRate <= 0) mResult.videoBitRate
-                    = estimateVideoBitRate(mResult.size, mResult.videoFrameRate);
-            if (mResult.audioBitRate <= 0) mResult.audioBitRate = DEFAULT_AUDIO_BITRATE;
+                    // Set default options
+                    if (mResult.videoFrameRate <= 0) mResult.videoFrameRate = DEFAULT_VIDEO_FRAMERATE;
+                    if (mResult.videoBitRate <= 0) mResult.videoBitRate
+                            = estimateVideoBitRate(mResult.size, mResult.videoFrameRate);
+                    if (mResult.audioBitRate <= 0) mResult.audioBitRate = DEFAULT_AUDIO_BITRATE;
 
-            // Define mime types
-            String videoType = "";
-            switch (mResult.videoCodec) {
-                case H_263: videoType = "video/3gpp"; break; // MediaFormat.MIMETYPE_VIDEO_H263;
-                case H_264:
-                case DEVICE_DEFAULT:
-                    videoType = "video/avc"; break; // MediaFormat.MIMETYPE_VIDEO_AVC:
-            }
-            String audioType = "audio/mp4a-latm";
-            TextureConfig videoConfig = new TextureConfig();
-            AudioConfig audioConfig = new AudioConfig();
+                    // Define mime types
+                    String videoType = "";
+                    switch (mResult.videoCodec) {
+                        case H_263: videoType = "video/3gpp"; break; // MediaFormat.MIMETYPE_VIDEO_H263;
+                        case H_264:
+                        case DEVICE_DEFAULT:
+                            videoType = "video/avc"; break; // MediaFormat.MIMETYPE_VIDEO_AVC:
+                    }
+                    String audioType = "audio/mp4a-latm";
+                    TextureConfig videoConfig = new TextureConfig();
+                    AudioConfig audioConfig = new AudioConfig();
 
-            int audioChannels = 2;
-            // Check the availability of values
-            Size newVideoSize = null;
-            int newVideoBitRate = 0;
-            int newAudioBitRate = 0;
-            int newVideoFrameRate = 0;
-            int videoEncoderOffset = 0;
-            int audioEncoderOffset = 0;
-            boolean encodersFound = false;
-            DeviceEncoders deviceEncoders = null;
-            while (!encodersFound) {
-                LOG.i("Checking DeviceEncoders...",
-                        "videoOffset:", videoEncoderOffset,
-                        "audioOffset:", audioEncoderOffset);
-                try {
-                    deviceEncoders = new DeviceEncoders(DeviceEncoders.MODE_RESPECT_ORDER,
-                            videoType, audioType, videoEncoderOffset, audioEncoderOffset);
-                } catch (RuntimeException e) {
-                    LOG.w("Could not respect encoders parameters.",
-                            "Going on again without checking encoders, possibly failing.");
-                    newVideoSize = mResult.size;
-                    newVideoBitRate = mResult.videoBitRate;
-                    newVideoFrameRate = mResult.videoFrameRate;
-                    newAudioBitRate = mResult.audioBitRate;
-                    break;
-                }
-                deviceEncoders = new DeviceEncoders(DeviceEncoders.MODE_PREFER_HARDWARE,
-                        videoType, audioType, videoEncoderOffset, audioEncoderOffset);
-                try {
-                    newVideoSize = deviceEncoders.getSupportedVideoSize(mResult.size);
-                    newVideoBitRate = deviceEncoders.getSupportedVideoBitRate(mResult.videoBitRate);
-                    newVideoFrameRate = deviceEncoders.getSupportedVideoFrameRate(newVideoSize,
-                            mResult.videoFrameRate);
-                    deviceEncoders.tryConfigureVideo(videoType, newVideoSize, newVideoFrameRate,
-                            newVideoBitRate);
-                    newAudioBitRate = deviceEncoders
-                            .getSupportedAudioBitRate(mResult.audioBitRate);
-                    deviceEncoders.tryConfigureAudio(audioType, newAudioBitRate,
-                            audioConfig.samplingFrequency, audioChannels);
-                    encodersFound = true;
-                } catch (DeviceEncoders.VideoException videoException) {
-                    LOG.i("Got VideoException:", videoException.getMessage());
-                    videoEncoderOffset++;
-                } catch (DeviceEncoders.AudioException audioException) {
-                    LOG.i("Got AudioException:", audioException.getMessage());
-                    audioEncoderOffset++;
-                }
-            }
+                    int audioChannels = 2;
+                    // Check the availability of values
+                    Size newVideoSize = null;
+                    int newVideoBitRate = 0;
+                    int newAudioBitRate = 0;
+                    int newVideoFrameRate = 0;
+                    int videoEncoderOffset = 0;
+                    int audioEncoderOffset = 0;
+                    boolean encodersFound = false;
+                    DeviceEncoders deviceEncoders = null;
+                    while (!encodersFound) {
+                        LOG.i("Checking DeviceEncoders...",
+                                "videoOffset:", videoEncoderOffset,
+                                "audioOffset:", audioEncoderOffset);
+                        try {
+                            deviceEncoders = new DeviceEncoders(DeviceEncoders.MODE_RESPECT_ORDER,
+                                    videoType, audioType, videoEncoderOffset, audioEncoderOffset);
+                        } catch (RuntimeException e) {
+                            LOG.w("Could not respect encoders parameters.",
+                                    "Going on again without checking encoders, possibly failing.");
+                            newVideoSize = mResult.size;
+                            newVideoBitRate = mResult.videoBitRate;
+                            newVideoFrameRate = mResult.videoFrameRate;
+                            newAudioBitRate = mResult.audioBitRate;
+                            break;
+                        }
+                        deviceEncoders = new DeviceEncoders(DeviceEncoders.MODE_PREFER_HARDWARE,
+                                videoType, audioType, videoEncoderOffset, audioEncoderOffset);
+                        try {
+                            newVideoSize = deviceEncoders.getSupportedVideoSize(mResult.size);
+                            newVideoBitRate = deviceEncoders.getSupportedVideoBitRate(mResult.videoBitRate);
+                            newVideoFrameRate = deviceEncoders.getSupportedVideoFrameRate(newVideoSize,
+                                    mResult.videoFrameRate);
+                            deviceEncoders.tryConfigureVideo(videoType, newVideoSize, newVideoFrameRate,
+                                    newVideoBitRate);
+                            newAudioBitRate = deviceEncoders
+                                    .getSupportedAudioBitRate(mResult.audioBitRate);
+                            deviceEncoders.tryConfigureAudio(audioType, newAudioBitRate,
+                                    audioConfig.samplingFrequency, audioChannels);
+                            encodersFound = true;
+                        } catch (DeviceEncoders.VideoException videoException) {
+                            LOG.i("Got VideoException:", videoException.getMessage());
+                            videoEncoderOffset++;
+                        } catch (DeviceEncoders.AudioException audioException) {
+                            LOG.i("Got AudioException:", audioException.getMessage());
+                            audioEncoderOffset++;
+                        }
+                    }
 
-            // Video
-            videoConfig.width = mResult.size.getWidth();
-            videoConfig.height = mResult.size.getHeight();
-            videoConfig.bitRate = mResult.videoBitRate;
-            videoConfig.frameRate = mResult.videoFrameRate;
-            videoConfig.rotation = rotation + mResult.rotation;
-            videoConfig.mimeType = videoType;
-            videoConfig.encoder = deviceEncoders.getVideoEncoder();
-            videoConfig.textureId = mTextureId;
-            videoConfig.scaleX = mResult.scaleX;
-            videoConfig.scaleY = mResult.scaleY;
-            // Get egl context from the RendererThread, which is the one in which we have created
-            // the textureId and the overlayTextureId, managed by the GlSurfaceView.
-            // Next operations can then be performed on different threads using this handle.
-            videoConfig.eglContext = EGL14.eglGetCurrentContext();
-            if (mHasOverlay) {
-                videoConfig.overlayTarget = Overlay.Target.VIDEO_SNAPSHOT;
-                videoConfig.overlayDrawer = mOverlayDrawer;
-                videoConfig.overlayRotation = mResult.rotation;
-                // ^ no "rotation" here! Overlays are already in VIEW ref.
-            }
-            // Audio
-            audioConfig.bitRate = mResult.audioBitRate;
-            audioConfig.channels = audioChannels;
-            audioConfig.encoder = deviceEncoders.getAudioEncoder();
+                    // Video
+                    videoConfig.width = mResult.size.getWidth();
+                    videoConfig.height = mResult.size.getHeight();
+                    videoConfig.bitRate = mResult.videoBitRate;
+                    videoConfig.frameRate = mResult.videoFrameRate;
+                    videoConfig.rotation = rotation + mResult.rotation;
+                    videoConfig.mimeType = videoType;
+                    videoConfig.encoder = deviceEncoders.getVideoEncoder();
+                    videoConfig.textureId = mTextureId;
+                    videoConfig.frontIsFirst = mFrontIsFirst;
+                    videoConfig.scaleX = mResult.scaleX;
+                    videoConfig.scaleY = mResult.scaleY;
+                    // Get egl context from the RendererThread, which is the one in which we have created
+                    // the textureId and the overlayTextureId, managed by the GlSurfaceView.
+                    // Next operations can then be performed on different threads using this handle.
+                    videoConfig.eglContext = eglContext/*EGL14.eglGetCurrentContext()*/;
+                    if (mHasOverlay) {
+                        videoConfig.overlayTarget = Overlay.Target.VIDEO_SNAPSHOT;
+                        videoConfig.overlayDrawer = mOverlayDrawer;
+                        videoConfig.overlayRotation = mResult.rotation;
+                        // ^ no "rotation" here! Overlays are already in VIEW ref.
+                    }
+                    // Audio
+                    audioConfig.bitRate = mResult.audioBitRate;
+                    audioConfig.channels = audioChannels;
+                    audioConfig.encoder = deviceEncoders.getAudioEncoder();
 
-            audioMediaEncoder = new AudioMediaEncoder(audioConfig);
-            textureMediaEncoder = new TextureMediaEncoder(videoConfig, audioMediaEncoder);
+                    audioMediaEncoder = new AudioMediaEncoder(audioConfig);
+                    textureMediaEncoder = new TextureMediaEncoder(videoConfig, audioMediaEncoder);
 
-            // Adjustment
+                    // Adjustment
 //            mResult.rotation = 0; // We will rotate the result instead.
 //            mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
-            // 解决MultiFilter时，录制视频拉伸问题
-            if (mCurrentFilter instanceof MultiFilter) {
-                for (Filter filter: ((MultiFilter) mCurrentFilter).getFilters()) {
-                    filter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
-                }
-            } else {
-                mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
-            }
+                    // 解决MultiFilter时，录制视频拉伸问题
+//            if (mCurrentFilter instanceof MultiFilter) {
+//                for (Filter filter: ((MultiFilter) mCurrentFilter).getFilters()) {
+//                    filter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
+//                }
+//            } else {
+//                mCurrentFilter.setSize(mResult.size.getWidth(), mResult.size.getWidth());
+//            }
 
-            // Engine
-            synchronized (mEncoderEngineLock) {
-                mEncoderEngine = new MediaEncoderEngine(mResult.file,
-                        textureMediaEncoder,
-                        audioMediaEncoder,
-                        SnapshotVideoRecorder.this);
-                mEncoderEngine.notify(TextureMediaEncoder.FILTER_EVENT, mCurrentFilter);
-                if (textureMediaEncoder != null) textureMediaEncoder.setFileterLevel(mPreview.getFilterLevel());
-                mEncoderEngine.start();
-                dispatchVideoRecordingStart();
-            }
-            mCurrentState = STATE_RECORDING;
+                    // Engine
+                    synchronized (mEncoderEngineLock) {
+                        mEncoderEngine = new MediaEncoderEngine(mResult.file,
+                                textureMediaEncoder,
+                                audioMediaEncoder,
+                                SnapshotVideoRecorder.this);
+//                mEncoderEngine.notify(TextureMediaEncoder.FILTER_EVENT, mCurrentFilter);
+//                if (textureMediaEncoder != null) textureMediaEncoder.setFileterLevel(mPreview.getFilterLevel());
+
+                        mEncoderEngine.start();
+                    }
+                    mCurrentState = STATE_RECORDING;
+                }
+            }).start();
         } else {
             if (mCurrentState == STATE_RECORDING) {
-                LOG.v("scheduling frame.");
+//                LOG.v("scheduling frame.");
                 synchronized (mEncoderEngineLock) {
                     if (mEncoderEngine != null) { // Can be null on teardown.
-                        LOG.v("dispatching frame.");
+//                        LOG.v("dispatching frame.");
+                        if (startTimestamp == 0) {
+                            startTimestamp = timestampNanos;
+                            dispatchVideoRecordingStart(startTimestamp);
+                        }
                         TextureMediaEncoder textureEncoder
                                 = (TextureMediaEncoder) mEncoderEngine.getVideoEncoder();
                         TextureMediaEncoder.Frame frame = textureEncoder.acquireFrame();
-                        frame.timestampNanos = surfaceTexture.getTimestamp();
+                        frame.timestampNanos = timestampNanos/*surfaceTexture.getTimestamp()*/;
                         // NOTE: this is an approximation but it seems to work:
-                        frame.timestampMillis = System.currentTimeMillis();
+//                        frame.timestampMillis = System.currentTimeMillis();
                         frame.cropScaleX = scaleX;
                         frame.cropScaleY = scaleY;
                         // 为了解决在倒计时过程中旋转屏幕导致录制结果颠倒的问题 ：mResult.rotation为倒计时开始时的角度；mResult.deviceRotation为倒计时结束时的角度
-                        if (mResult.deviceRotation != mResult.rotation && Math.abs(mResult.rotation - mResult.deviceRotation) % 180 != 0) {
-                            frame.drawRotation = (rotation + 180) % 360;
-                        } else {
-                            frame.drawRotation = rotation;
-                        }
-                        surfaceTexture.getTransformMatrix(frame.transform);
+//                        if (mResult.deviceRotation != mResult.rotation && Math.abs(mResult.rotation - mResult.deviceRotation) % 180 != 0) {
+//                            frame.drawRotation = (rotation + 180) % 360;
+//                        } else {
+//                            frame.drawRotation = rotation;
+//                        }
+                        frame.drawRotation = 0;
+                        frame.inputTextureId = inputTextureId;
+//                        if (inputTextureId != -1 && inputTextureId != mTextureId && textureMediaEncoder != null) {
+//                            mTextureId = inputTextureId;
+//                            textureMediaEncoder.changeInputTextureId(mTextureId);
+//                        }
+//                        LOG.e(TAG, "------------------> onRendererFrame:", frame.timestampNanos);
                         mEncoderEngine.notify(TextureMediaEncoder.FRAME_EVENT, frame);
                     }
                 }
-            }
-
-            if (mCurrentState == STATE_RECORDING && mDesiredState == STATE_NOT_RECORDING) {
-                LOG.i("Stopping the encoder engine.");
-                mCurrentState = STATE_NOT_RECORDING;
-                synchronized (mEncoderEngineLock) {
-                    if (mEncoderEngine != null) {
-                        mEncoderEngine.stop();
+                if (mDesiredState == STATE_NOT_RECORDING) {
+                    LOG.i("Stopping the encoder engine.");
+                    mCurrentState = STATE_NOT_RECORDING;
+                    startTimestamp = 0;
+                    synchronized (mEncoderEngineLock) {
+                        if (mEncoderEngine != null) {
+                            mEncoderEngine.stop();
+                        }
                     }
                 }
             }

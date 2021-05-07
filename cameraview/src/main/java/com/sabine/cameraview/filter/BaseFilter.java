@@ -154,14 +154,28 @@ public abstract class BaseFilter implements Filter {
     }
 
     @Override
-    public void draw(long timestampUs, @NonNull float[] transformMatrix) {
+    public void setSize(int width, int height, int inputStreamWidth, int inputStreamHeight) {
+        setSize(width,height);
+    }
+
+    @Override
+    public Size getSize() {
+        return size;
+    }
+
+    @Override
+    public void draw(long timestampNs, @NonNull float[] transformMatrix) {
         if (program == null) {
             LOG.w("Filter.draw() called after destroying the filter. " +
                     "This can happen rarely because of threading.");
         } else {
-            onPreDraw(timestampUs, transformMatrix);
-            onDraw(timestampUs);
-            onPostDraw(timestampUs);
+            try {
+                onPreDraw(timestampNs/1000, transformMatrix);
+                onDraw(timestampNs/1000);
+                onPostDraw(timestampNs/1000);
+            } catch (RuntimeException e) {
+                LOG.e("RuntimeException:", e.getLocalizedMessage());
+            }
         }
     }
 
@@ -213,5 +227,28 @@ public abstract class BaseFilter implements Filter {
 
     public void setInputImageTexture0(GlTexture glTexture) {
         inputImageTexture0 = glTexture;
+    }
+
+    @Override
+    public void setSecondTexture(GlTexture secondTexture, float frontIsFirst) {
+    }
+
+    @Override
+    public void setSecondTexture(GlTexture secondTexture, float frontIsFirst, float drawRotation) {
+    }
+
+    @Override
+    public void setDualInputTextureMode(float inputTextureMode) {
+
+    }
+
+    @Override
+    public void setAspectRatio(float aspectRatio) {
+
+    }
+
+    @Override
+    public offscreenTexture getLastOutputTextureId() {
+        return null;
     }
 }

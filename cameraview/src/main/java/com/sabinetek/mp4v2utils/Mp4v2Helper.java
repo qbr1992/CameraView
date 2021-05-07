@@ -1,5 +1,7 @@
 package com.sabinetek.mp4v2utils;
 
+import java.nio.ByteBuffer;
+
 public class Mp4v2Helper {
     static {
         System.loadLibrary("Mp4v2Helper");

@@ -2,6 +2,7 @@ package com.sabine.cameraview.internal;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -13,6 +14,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -23,10 +25,16 @@ import com.sabine.cameraview.CameraView;
 import com.sabine.cameraview.R;
 import com.sabine.cameraview.SensorController;
 import com.sabine.cameraview.engine.Camera2Engine;
+import com.sabine.cameraview.engine.CameraBaseEngine;
+import com.sabine.cameraview.engine.CameraEngine;
+import com.sabine.cameraview.preview.CameraPreview;
+import com.sabine.cameraview.preview.GlCameraPreview;
 
 import java.lang.reflect.Method;
 
 public class FocusLayout extends View {
+
+    public static final String TAG = FocusLayout.class.getSimpleName();
 
     // 放大缩小
     private float zoomTrackLength;// track 的长度
@@ -56,11 +64,14 @@ public class FocusLayout extends View {
     private float exposureTop, exposureBottom;// 进度条 最小最大点
     private float exposureBmpLeftPoint, exposureBmpRightPoint, exposureBmpTopPoint, exposureBmpBottomPoint;
     private float currX, currY;// 当前X Y 点
+    private float currX2, currY2;// 双摄第二路当前X Y 点
     private Paint focusProgressPaint, exposureLinePaint, exposureBpmPaint;
     private float focusBmpLeftPoint, focusBmpRightPoint, focusBmpTopPoint, focusBmpBottomPoint;     // 焦点框坐标
+    private float focus2BmpLeftPoint, focus2BmpRightPoint, focus2BmpTopPoint, focus2BmpBottomPoint;     // 双摄第二路焦点框坐标
     private Bitmap exposureBmp;// thumb
+    private Bitmap focusBmp;
     private boolean isClear = true;// 是否清空view
-    private boolean isAutoExploreFocus = true;  // 是否自动曝光/聚焦
+    private boolean camera2Clear = true;// 是否清空view
     private int exposureOffset;// 左右间隔
     private boolean isShowExposure;// 是否显示曝光调节
     private boolean isMoveOccurs = false;
@@ -81,6 +92,8 @@ public class FocusLayout extends View {
     private CameraView mCameraView;
     private OnFocusListener mFocusListener;
 
+    private Camera2Engine mCameraEngine;
+
     public FocusLayout(Context context) {
         this(context, null);
     }
@@ -96,6 +109,7 @@ public class FocusLayout extends View {
 
     public void setCameraView(CameraView cameraView) {
         this.mCameraView = cameraView;
+        mCameraEngine = (Camera2Engine) mCameraView.getCameraEngine();
     }
 
     public void setOnFocusListener(OnFocusListener focusListener) {
@@ -132,25 +146,10 @@ public class FocusLayout extends View {
         if (mCameraView == null) return;
         CameraOptions options = mCameraView.getCameraOptions();
         if (options == null) return;
-        // 缩放值
-        zoomOffset = DensityUtil.dp2px(3);
         zoomMin = 0;
         zoomMax = 1;
         zoomProgress = mCameraView.getZoom();
         initZoomProgress = zoomProgress;
-        zoomDelta = zoomMax - zoomMin;
-        // 横竖屏转换
-//        if (mRotation == Surface.ROTATION_90 || mRotation == Surface.ROTATION_270) {
-//            // 横屏设置
-////			zoomLeft = DensityUtil.dp2px(162);
-////			zoomRight = getWidth() - zoomLeft;
-////			zoomBottom = DensityUtil.dp2px(80);
-//        } else if (mRotation == Surface.ROTATION_0 || mRotation == Surface.ROTATION_180) {
-            // 竖屏设置
-            zoomLeft = DensityUtil.dp2px(28);
-            zoomRight = getWidth() - zoomLeft;
-            zoomBottom = DensityUtil.dp2px(15);
-//        }
         // 曝光
         // 曝光的取值范围
         exposureTrackRadius = DensityUtil.dp2px(48);
@@ -164,20 +163,44 @@ public class FocusLayout extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (!isZoomThumbOnDragging && isShowExposure && !isClear) {
-            drawFocusMeteringExposure(canvas);
+        if (isShowExposure) {
+            // 是否重新绘制位置
+            if (!isExposureThumbOnDragging && !flip && mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex())) {
+                if (mCameraView.dual() && mCameraEngine.getCurrentCameraIndex() == 1) {
+                    currX2 = eventX;
+                    currY2 = eventY;
+                } else {
+                    currX = eventX;
+                    currY = eventY;
+                }
+            }
+            if (mCameraView.dual()) {
+                // 双摄
+                if ((currX != 0 || currY != 0) && ((!isClear && mCameraEngine.getCurrentCameraIndex() == 0) || !mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX, currY))))) {
+                    drawFocusMeteringExposure(canvas, currX, currY, mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX, currY))));
+                } else { // camera1隐藏后，需要将坐标清零，避免点击相同位置直接变为锁定状态
+                    focusBmpTopPoint = focusBmpBottomPoint = focusBmpLeftPoint = focusBmpRightPoint = 0;
+                }
+                if ((currX2 != 0 || currY2 != 0) && ((!camera2Clear && mCameraEngine.getCurrentCameraIndex() == 1) || !mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX2, currY2))))) {
+                    drawFocusMeteringExposure(canvas, currX2, currY2, mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX2, currY2))));
+                } else { // camera2隐藏后，需要将坐标清零，避免点击相同位置直接变为锁定状态
+                    focus2BmpTopPoint = focus2BmpBottomPoint = focus2BmpLeftPoint = focus2BmpRightPoint = 0;
+                }
+            } else {
+                // 非双摄
+                if (!isClear()) {
+                    drawFocusMeteringExposure(canvas, currX, currY, mCameraEngine.isAutoExposure());
+                }
+            }
+            if (flip) flip = false;
         }
     }
 
     // 绘制聚焦测光区域 -曝光进度条
-    private void drawFocusMeteringExposure(Canvas canvas) {
+    private void drawFocusMeteringExposure(Canvas canvas, float currX, float currY, boolean isAutoExploreFocus) {
         // 圆半径
         float radius = DensityUtil.dp2px(32);
-        // 是否重新绘制位置
-        if (!isExposureThumbOnDragging) {
-            currX = eventX;
-            currY = eventY;
-        }
+
         // 绘制圆 对焦测光区域
         float left = currX - radius;
         float right = currX + radius;
@@ -206,15 +229,20 @@ public class FocusLayout extends View {
             top = bottom - radius * 2;
         }
         //绘图
-        Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.focus_square);
+        if (focusBmp == null) focusBmp = BitmapFactory.decodeResource(getResources(), R.drawable.focus_square);
         //居中计算
-        float w = bitmap.getWidth();
-        float h = bitmap.getHeight();
+        float w = focusBmp.getWidth();
+        float h = focusBmp.getHeight();
         float bitmap_l = (left+right) / 2 - radius;
         float bitmap_r = (left+right) / 2 + radius;
         float bitmap_t = (top+bottom) / 2 - radius;
         float bitmap_b = (top+bottom) / 2 + radius;
-        focusBmpLeftPoint = bitmap_l;focusBmpRightPoint = bitmap_r;focusBmpTopPoint = bitmap_t;focusBmpBottomPoint = bitmap_b;
+
+        if (mCameraView.dual() && mCameraEngine.getCurrentCameraIndex(new PointF(currX, currY)) == 1) {
+            focus2BmpLeftPoint = bitmap_l;focus2BmpRightPoint = bitmap_r;focus2BmpTopPoint = bitmap_t;focus2BmpBottomPoint = bitmap_b;
+        } else {
+            focusBmpLeftPoint = bitmap_l;focusBmpRightPoint = bitmap_r;focusBmpTopPoint = bitmap_t;focusBmpBottomPoint = bitmap_b;
+        }
         // 锁定时，设置焦点框红色
         if (!isAutoExploreFocus) {
             focusProgressPaint.setColorFilter(new PorterDuffColorFilter(Color.RED, PorterDuff.Mode.SRC_IN));
@@ -222,13 +250,13 @@ public class FocusLayout extends View {
         } else {
             focusProgressPaint.setColorFilter(null);
         }
-        canvas.drawBitmap(bitmap, null, new Rect((int) bitmap_l, (int) bitmap_t, (int) bitmap_r, (int) bitmap_b), focusProgressPaint);
+        canvas.drawBitmap(focusBmp, null, new Rect((int) bitmap_l, (int) bitmap_t, (int) bitmap_r, (int) bitmap_b), focusProgressPaint);
         // 若不自动曝光对焦，则取消绘制滑块
         if (!isAutoExploreFocus) {
             return;
         }
         // thumb 图片
-        exposureBmp = BitmapFactory.decodeResource(getResources(), R.drawable.video_btn_exposure);
+        if (exposureBmp == null) exposureBmp = BitmapFactory.decodeResource(getResources(), R.drawable.video_btn_exposure);
         // Track 的长度
         exposureTrackLength = 2 * exposureTrackRadius;
 
@@ -293,12 +321,18 @@ public class FocusLayout extends View {
         switch (action) {
             // 按下
             case MotionEvent.ACTION_DOWN: //0
+                mCameraView.selectOpenedCamera(new PointF(event.getX(), event.getY()));
                 // 显示时再次down，则取消自动曝光和自动聚焦
-                if (!isClear && isAutoExploreFocus && isFocusTouched(event)) {
-                    isAutoExploreFocus = false;
-                    SensorController.getInstance(mCameraView.getContext()).lockFocus();
-                    ((Camera2Engine) mCameraView.getCameraEngine()).lockExposure();
-                    ((Camera2Engine) mCameraView.getCameraEngine()).lockFocus();
+                exposureProgress = mCameraView.getExposureCorrection();
+                if (!isClear() && mCameraEngine.isAutoExposure() && isFocusTouched(event)) {
+                    if (mCameraEngine.getCurrentCameraIndex() == 1) {
+                        SensorController.getInstance(mCameraView.getContext()).lockCamera2Focus();
+                    }
+                    if (mCameraEngine.getCurrentCameraIndex() == 0) {
+                        SensorController.getInstance(mCameraView.getContext()).lockFocus();
+                    }
+                    mCameraEngine.lockExposure();
+                    mCameraEngine.lockFocus();
                     if (mFocusListener != null) mFocusListener.onExposure(exposureProgress, new float[4], new PointF[1]);
                     postInvalidate();       // 取消曝光条
                     try {
@@ -308,16 +342,24 @@ public class FocusLayout extends View {
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
+                    eventX = event.getX();
+                    eventY = event.getY();
                     return false;
                 // 锁定时再次down，则取消锁定
-                } else if (!isClear && !isAutoExploreFocus && isFocusTouched(event)) {
-                    isAutoExploreFocus = true;
-                    isClear = true;
-                    SensorController.getInstance(mCameraView.getContext()).unlockFocus();
-                    ((Camera2Engine) mCameraView.getCameraEngine()).unlockExposure();
-                    ((Camera2Engine) mCameraView.getCameraEngine()).unlockFocus();
+                } else if (!isClear() && !mCameraEngine.isAutoExposure() && isFocusTouched(event)) {
+                    if (mCameraEngine.getCurrentCameraIndex() == 1) {
+                        SensorController.getInstance(mCameraView.getContext()).unlockCamera2Focus();
+                    }
+                    if (mCameraEngine.getCurrentCameraIndex() == 0) {
+                        SensorController.getInstance(mCameraView.getContext()).unlockFocus();
+                    }
+                    setClear(true, false);
+                    mCameraEngine.unlockExposure();
+                    mCameraEngine.unlockFocus();
                 // 锁定但点击focus区域外，则不处理事件
-                } else if (!isClear && !isAutoExploreFocus) {       // bug trigger 1
+                } else if (!isClear() && !mCameraEngine.isAutoExposure()) {       // bug trigger 1
+                    eventX = event.getX();
+                    eventY = event.getY();
                     return false;
                 }
                 downX = (int) event.getX();
@@ -344,7 +386,7 @@ public class FocusLayout extends View {
             // 有手指离开屏幕,但屏幕还有触点
             case MotionEvent.ACTION_UP: // 1
                 // 若显示焦点框 && 锁定，则取消事件
-                if (!isClear && !isAutoExploreFocus) {
+                if (!isClear() && !mCameraEngine.isAutoExposure()) {
                     return false;
                 }
                 if (isMoveOccurs) {
@@ -358,7 +400,7 @@ public class FocusLayout extends View {
                 }
                 /* 清空 */
                 pointerDown = false;
-                isClear = false;
+                setClear(false, false);
                 handler.removeMessages(CLEAR_VIEW);
                 postInvalidate();
                 handler.sendEmptyMessageDelayed(CLEAR_VIEW, 3000);
@@ -381,11 +423,13 @@ public class FocusLayout extends View {
             // 当屏幕上还有触点（手指），再有一个手指压下屏幕
             case 261:
             case MotionEvent.ACTION_POINTER_DOWN: //5
-                isClear = true;         // 解决双指接触屏幕后，焦点框可能一直无法显示问题 --> bug trigger 1
+                mCameraView.selectOpenedCamera(new PointF(event.getX(), event.getY()));
+                setClear(true, false);        // 解决双指接触屏幕后，焦点框可能一直无法显示问题 --> bug trigger 1
                 isShowExposure = false;
                 // 缩放
                 mode = ZOOM;
                 pointerDown = true;
+                zoomProgress = mCameraView.getZoom();
                 startDis = distance(event);
                 handler.removeMessages(CLEAR_VIEW);
                 break;
@@ -393,25 +437,38 @@ public class FocusLayout extends View {
         return true;
     }
 
-    protected void clearView() {
+    protected void clearView(int index) {
         // 重置view时 重置参数值
-        isClear = true;
-        zoomProgress = initZoomProgress;
-        exposureProgress = initExposureProgress;
-        postInvalidate();
+        if (index == 1) {
+            camera2Clear = true;
+        } else {
+            isClear = true;
+        }
     }
 
     // 接收消息机制
     @SuppressLint("HandlerLeak")
-    private Handler handler = new Handler() {
+    private final Handler handler = new Handler() {
         public void handleMessage(android.os.Message msg) {
             int tag = msg.what;
             if (tag == CLEAR_VIEW) {
-                if (isAutoExploreFocus) {
-                    clearView();
+                if (mCameraView.dual()) {
+                    if (mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX, currY)))) {
+                        clearView(0);
+                    }
+                    if (mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX2, currY2)))) {
+                        clearView(1);
+                    }
+                } else {
+                    if (mCameraEngine.isAutoExposure()) {
+                        clearView(0);
+                    }
                 }
+                zoomProgress = initZoomProgress;
+                exposureProgress = initExposureProgress;
+                postInvalidate();
             }
-        };
+        }
     };
 
     // 按下测光事件
@@ -439,12 +496,15 @@ public class FocusLayout extends View {
     private synchronized boolean isFocusTouched(MotionEvent event) {
         float x = event.getX();
         float y = event.getY();
+        if (mCameraEngine.getCurrentCameraIndex() == 1) {
+            return x >= focus2BmpLeftPoint && x <= focus2BmpRightPoint && y >= focus2BmpTopPoint && y <= focus2BmpBottomPoint;
+        }
         return x >= focusBmpLeftPoint && x <= focusBmpRightPoint && y >= focusBmpTopPoint && y <= focusBmpBottomPoint;
     }
 
     // 曝光的调节
     private void actionMoveProgressExposure(MotionEvent event) {
-        if (isExposureThumbOnDragging && !isClear && isAutoExploreFocus) {
+        if (isExposureThumbOnDragging && !isClear() && mCameraEngine.isAutoExposure()) {
             exposureThumbCenterY = event.getY() + dy;
             if (exposureThumbCenterY < exposureTop) {
                 exposureThumbCenterY = exposureTop;
@@ -499,13 +559,119 @@ public class FocusLayout extends View {
         void onExposure(float exposureValue, float[] bounds, PointF[] exposurePoint);
     }
 
+    public void resetExposure(int orientation, float scale) {
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            currX = currX * scale;
+            currX2 = currX2 * scale;
+        } else {
+            currY = currY * scale;
+            currY2 = currY2 * scale;
+        }
+
+        if (mCameraView.dual()) {
+            mCameraEngine.unlockExposure();
+            mCameraEngine.unlockFocus();
+            if (mCameraView.getCameraOptions() != null) {
+                float minValue = mCameraView.getCameraOptions().getExposureCorrectionMinValue();
+                float maxValue = mCameraView.getCameraOptions().getExposureCorrectionMaxValue();
+                float[] bounds = new float[]{minValue, maxValue};
+                mCameraEngine.setExposureCorrection(mCameraEngine.getExposureCorrectionValue(0), bounds, new PointF[] {new PointF(currX, currY)}, false, mCameraEngine.getCurrentCameraIndex(new PointF(currX, currY)));
+                mCameraEngine.setExposureCorrection(mCameraEngine.getExposureCorrectionValue(1), bounds, new PointF[] {new PointF(currX, currY)}, false, mCameraEngine.getCurrentCameraIndex(new PointF(currX2, currY2)));
+            }
+        }
+    }
+
     /**
      * 重置视图
      */
     public void resetView() {
-        isAutoExploreFocus = true;
-        isClear = true;
+        if (mCameraEngine == null) mCameraEngine = (Camera2Engine) mCameraView.getCameraEngine();
+        mCameraEngine.unlockAll();
+        SensorController.getInstance(mCameraView.getContext()).unlockFocus();
+        SensorController.getInstance(mCameraView.getContext()).unlockCamera2Focus();
+        setClear(true, true);
+        // 重置点击坐标
+        currX = currY = currX2 = currY2 = 0;
         postInvalidate();
+    }
+
+    private boolean isClear() {
+        if (mCameraView.dual() && mCameraEngine.getCurrentCameraIndex() == 1) return camera2Clear;
+        else return isClear;
+    }
+
+    /**
+     *
+     * @param clear 设置是否清除
+     * @param allClear 是否全部清除
+     */
+    private void setClear(boolean clear, boolean allClear) {
+        if (allClear) {
+            isClear = clear;
+            camera2Clear = clear;
+        } else {
+            if (mCameraView.dual() && mCameraEngine.getCurrentCameraIndex() == 1)  camera2Clear = clear;
+            else isClear = clear;
+        }
+    }
+
+    private boolean flip;
+
+    /**
+     * 切换状态
+     * @param orientation
+     * @param flip
+     */
+    public void switchDualCamera(int orientation, boolean flip) {
+        handler.removeMessages(CLEAR_VIEW);
+        if (mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX, currY)))) {
+            isClear = true;
+        }
+        if (mCameraEngine.isAutoExposure(mCameraEngine.getCurrentCameraIndex(new PointF(currX2, currY2)))) camera2Clear = true;
+        this.flip = flip;
+        if (flip) {
+            float halfWidth = getWidth() / 2f;
+            float halfHeight = getHeight() / 2f;
+
+            // 坐标位置调换
+            float currtX = currX;
+            float currtY = currY;
+            if (mCameraView.getDualInputTextureMode() == CameraPreview.DualInputTextureMode.PIP_MODE) {
+                // 画中画模式, 按比例对调位置
+                float left = getWidth() - getWidth() / 3.0f - getWidth() * 0.02f;
+                float top = getHeight() - getHeight() / 3.0f - getWidth() * 0.02f;
+                currtX = (currX2 - left) * 3.0f;
+                currtY = (currY2 - top) * 3.0f;
+                currX2 = currX / 3.0f + left;
+                currY2 = currY / 3.0f + top;
+                currX = currtX;
+                currY = currtY;
+
+                if (currX > left && currY > top) {
+                    currX = left - DensityUtil.dp2px(32) - exposureBmp.getWidth();
+                }
+            } else {
+                // 上下模式
+                if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                    currX = currX2 > halfWidth ? currX2 - halfWidth : currX2 + halfWidth;
+                    currY = currY2;
+                    currX2 = currtX > halfWidth ? currtX - halfWidth : currtX + halfWidth;
+                    currY2 = currtY;
+                } else {
+                    currX = currX2;
+                    currY = currY2 > halfHeight ? currY2 - halfHeight : currY2 + halfHeight;
+                    currX2 = currtX;
+                    currY2 = currtY > halfHeight ? currtY - halfHeight : currtY + halfHeight;
+                }
+            }
+
+            // 锁定状态调换
+            boolean isClear = this.isClear;
+            this.isClear = camera2Clear;
+            camera2Clear = isClear;
+
+            postInvalidate();
+        }
     }
 
 }

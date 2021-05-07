@@ -5,6 +5,7 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.os.Build;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,12 +18,14 @@ import com.sabinetek.mp4v2utils.Mp4v2Helper;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -95,6 +98,23 @@ public class MediaEncoderEngine {
         void onEncodingEnd(int reason, @Nullable Exception e);
     }
 
+    public class WriteOutputEntry {
+        public byte[] mOutputBuffer;
+        public boolean mIsConfig;
+        public boolean mIsVideo;
+        public long mPresentationTimeUs;
+
+        public WriteOutputEntry() {
+        }
+
+        public WriteOutputEntry(byte[] outputBuffer, boolean isConfig, boolean isVideo, long presentationTimeUs) {
+            mOutputBuffer = outputBuffer;
+            mIsConfig = isConfig;
+            mIsVideo = isVideo;
+            mPresentationTimeUs = presentationTimeUs;
+        }
+    }
+
     private final static String TAG = MediaEncoderEngine.class.getSimpleName();
     private final static CameraLogger LOG = CameraLogger.create(TAG);
     private static final boolean DEBUG_PERFORMANCE = false;
@@ -114,12 +134,17 @@ public class MediaEncoderEngine {
     private final Controller mController = new Controller();
     private final WorkerHandler mControllerThread = WorkerHandler.get("EncoderEngine");
     private final Object mControllerLock = new Object();
+    private final Object mOutputQueueLock = new Object();
     private Listener mListener;
     private int mEndReason = END_BY_USER;
 
     private Mp4v2Helper mMp4v2Helper;
 
     private final Map<String, AtomicInteger> mPendingEvents = new HashMap<>();
+
+    private Thread mWriteMp4Thread;
+    private List<WriteOutputEntry> mOutputEntrys;
+    private boolean mWriteEnd;
 
     /**
      * Creates a new engine for the given file, with the given encoders and max limits,
@@ -151,6 +176,8 @@ public class MediaEncoderEngine {
             }
         }
         mPendingEvents.put(TAG, new AtomicInteger(0));
+        mOutputEntrys = new ArrayList<>();
+        mWriteEnd = false;
 
         // Trying to convert the size constraints to duration constraints,
         // because they are super easy to check.
@@ -176,6 +203,69 @@ public class MediaEncoderEngine {
         for (MediaEncoder encoder : mEncoders) {
             encoder.start();
         }
+        mWriteMp4Thread = new Thread() {
+            @Override
+            public void run() {
+                while (!mWriteEnd) {
+//                    synchronized (mControllerLock) {
+//                    Log.e("aaa", "run: mOutputEntrys.size === " + mOutputEntrys.size());
+                        if (mOutputEntrys.size() == 0) {
+                            try {
+                                synchronized (mOutputQueueLock) {
+                                    mOutputQueueLock.wait();
+                                }
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        } else {
+                            if (mMp4v2Helper != null) {
+                                int result = 0;
+                                WriteOutputEntry writeOutputEntry = mOutputEntrys.get(0);
+                                if (writeOutputEntry == null) {
+                                    LogUtil.e(TAG, "run: writeOutputEntry == " + writeOutputEntry);
+                                    for (int i = 0; i < mOutputEntrys.size(); i++) {
+                                        LogUtil.e("aaa", "run: i === " + i + ", mOutputEntrys.get(i) === " + mOutputEntrys.get(i) + ", writeOutputEntry === " + writeOutputEntry);
+                                    }
+                                }
+//                                if (writeOutputEntry != null) {
+                                    if (writeOutputEntry.mIsConfig) {
+                                        if (writeOutputEntry.mIsVideo) {
+                                            if (mMp4v2Helper != null) result = mMp4v2Helper.addVideoTrack(writeOutputEntry.mOutputBuffer, writeOutputEntry.mOutputBuffer.length);
+                                        } else {
+                                            if (mMp4v2Helper != null) result = mMp4v2Helper.addAudioTrack(writeOutputEntry.mOutputBuffer, writeOutputEntry.mOutputBuffer.length);
+                                        }
+                                    } else {
+                                        if (mPresentationTimeUs == 0 && writeOutputEntry.mIsVideo) {
+                                            mPresentationTimeUs = writeOutputEntry.mPresentationTimeUs;
+                                        }
+                                        if (mPresentationTimeUs != 0) {
+                                            if (writeOutputEntry.mIsVideo && mMp4v2Helper != null && writeOutputEntry.mPresentationTimeUs >= mPresentationTimeUs) {
+                                                result = mMp4v2Helper.writeVideo(writeOutputEntry.mOutputBuffer, writeOutputEntry.mOutputBuffer.length, writeOutputEntry.mPresentationTimeUs);
+                                            } else if (mMp4v2Helper != null && writeOutputEntry.mPresentationTimeUs >= mPresentationTimeUs) {
+                                                result = mMp4v2Helper.writeAudio(writeOutputEntry.mOutputBuffer, writeOutputEntry.mOutputBuffer.length, writeOutputEntry.mPresentationTimeUs);
+                                            }
+                                        }
+                                    }
+                                synchronized (mOutputQueueLock) {
+                                    mOutputEntrys.remove(0);
+                                }
+//                                } else {
+//                                    LogUtil.e(TAG, "writeOutputEntry == null");
+//                                }
+                                if (result < 0) LogUtil.e(TAG, "write: encodeArray.length == " + writeOutputEntry.mOutputBuffer.length + ", result = " + result);
+
+                            } else
+                                break;
+                        }
+//                    }
+                }
+                if (mMp4v2Helper != null) {
+                    mMp4v2Helper.close();
+                    mMp4v2Helper = null;
+                }
+            }
+        };
+        mWriteMp4Thread.start();
     }
 
     /**
@@ -215,11 +305,19 @@ public class MediaEncoderEngine {
      * the listener.
      */
     private void end() {
+        synchronized (mOutputQueueLock) {
+            mWriteEnd = true;
+            mOutputQueueLock.notify();
+        }
         synchronized (mControllerLock) {
             LOG.e("end:", "Releasing muxer after all encoders have been released.");
             Exception error = null;
-            mMp4v2Helper.close();
-            mMp4v2Helper = null;
+//            mMp4v2Helper.close();
+//            mMp4v2Helper = null;
+
+//            mWriteEnd = true;
+//            mOutputQueueLock.notify();
+
             LogUtil.w("end:", "\n\n\n ");
             mEndReason = END_BY_USER;
             mControllerThread.destroy();
@@ -257,6 +355,8 @@ public class MediaEncoderEngine {
     @SuppressWarnings("WeakerAccess")
     public class Controller {
 
+        private long mPresentationTimeUs = 0;
+
         /**
          * Request that the muxer should start. This is not guaranteed to be executed:
          * we wait for all encoders to call this method, and only then, start the muxer.
@@ -265,11 +365,11 @@ public class MediaEncoderEngine {
          */
         public void notifyStarted(@NonNull MediaFormat format) {
             synchronized (mControllerLock) {
-                LogUtil.e("notifyStarted:", "mp4v2 " + " format" +
-                        format.getString(MediaFormat.KEY_MIME));
+//                LogUtil.e("notifyStarted:", "mp4v2 " + " format" +
+//                        format.getString(MediaFormat.KEY_MIME));
                 if (++mStartedEncodersCount == mEncoders.size()) {
-                    LogUtil.e("notifyStarted:", "mMediaMuxer All encoders have started." +
-                            "Starting muxer and dispatching onEncodingStart().");
+//                    LogUtil.e("notifyStarted:", "mMediaMuxer All encoders have started." +
+//                            "Starting muxer and dispatching onEncodingStart().");
                     // Go out of this thread since it might be very important for the
                     // encoders and we don't want to perform expensive operations here.
                     mControllerThread.run(new Runnable() {
@@ -292,9 +392,9 @@ public class MediaEncoderEngine {
          * @return true if muxer was started
          */
         public boolean isStarted() {
-            synchronized (mControllerLock) {
+//            synchronized (mControllerLock) {
                 return mMediaMuxerStartStatus == 1;
-            }
+//            }
         }
 
         /**
@@ -316,31 +416,63 @@ public class MediaEncoderEngine {
          * @param buffer buffer
          */
         public void write(@NonNull OutputBufferPool pool, @NonNull OutputBuffer buffer, boolean isConfig) {
-            synchronized (mControllerLock) {
-                int result = 0;
-                byte[] encodeArray = new byte[buffer.data.remaining()];
-                buffer.data.get(encodeArray);
-                if (isConfig) {
-                    if (buffer.isVideo) {
-                        if (mMp4v2Helper != null) result = mMp4v2Helper.addVideoTrack(encodeArray, encodeArray.length);
-                    } else {
-                        if (mMp4v2Helper != null) result = mMp4v2Helper.addAudioTrack(encodeArray, encodeArray.length);
-                    }
-                } else {
-                    if (mPresentationTimeUs == 0 && buffer.isVideo) {
-                        mPresentationTimeUs = buffer.info.presentationTimeUs;
-                    }
-                    if (mPresentationTimeUs != 0) {
-                        if (buffer.isVideo && mMp4v2Helper != null && buffer.info.presentationTimeUs >= mPresentationTimeUs) {
-                            result = mMp4v2Helper.writeVideo(encodeArray, encodeArray.length, buffer.info.presentationTimeUs);
-                        } else if (mMp4v2Helper != null && buffer.info.presentationTimeUs >= mPresentationTimeUs) {
-                            result = mMp4v2Helper.writeAudio(encodeArray, encodeArray.length, buffer.info.presentationTimeUs);
-                        }
-                    }
+//            synchronized (mControllerLock) {
+            int nBufferSize = buffer.data.remaining();
+            if (nBufferSize > 0) {
+//                byte[] encodeArray = new byte[buffer.data.remaining()];
+//                buffer.data.get(encodeArray);
+
+                WriteOutputEntry writeOutputEntry = new WriteOutputEntry();
+                writeOutputEntry.mOutputBuffer = new byte[nBufferSize];
+                writeOutputEntry.mIsConfig = isConfig;
+                writeOutputEntry.mIsVideo = buffer.isVideo;
+                writeOutputEntry.mPresentationTimeUs = buffer.info.presentationTimeUs;
+                if (mPresentationTimeUs == 0 && buffer.isVideo)
+                    mPresentationTimeUs = buffer.info.presentationTimeUs;
+                buffer.data.get(writeOutputEntry.mOutputBuffer);
+                synchronized (mOutputQueueLock) {
+//                    mOutputEntrys.add(new WriteOutputEntry(encodeArray, isConfig, buffer.isVideo, buffer.info.presentationTimeUs));
+                    mOutputEntrys.add(writeOutputEntry);
+                    mOutputQueueLock.notify();
                 }
-                if (result < 0) LogUtil.e(TAG, "write: encodeArray.length == " + encodeArray.length + ", result = " + result);
-                pool.recycle(buffer);
             }
+                pool.recycle(buffer);
+
+//                int result = 0;
+//                //TODO:修改libMp4V2Helper.so库接口，直接传递ByteBuffer类型参数，不必在调用接口前转成byte[]类型
+////                byte[] encodeArray = new byte[buffer.data.remaining()];
+////                buffer.data.get(encodeArray);
+//
+//                if (isConfig) {
+//                    if (buffer.isVideo) {
+//                        if (mMp4v2Helper != null) result = mMp4v2Helper.native_addVideoTrack(buffer.data, buffer.data.remaining()/*encodeArray, encodeArray.length*/);
+//                    } else {
+//                        if (mMp4v2Helper != null) result = mMp4v2Helper.native_addAudioTrack(buffer.data, buffer.data.remaining()/*encodeArray, encodeArray.length*/);
+//                    }
+//                } else {
+//                    if (mPresentationTimeUs == 0 && buffer.isVideo) {
+//                        mPresentationTimeUs = buffer.info.presentationTimeUs;
+//                    }
+//                    if (mPresentationTimeUs != 0) {
+//                        if (buffer.isVideo && mMp4v2Helper != null && buffer.info.presentationTimeUs >= mPresentationTimeUs) {
+//                            result = mMp4v2Helper.native_writeVideo(buffer.data, buffer.data.remaining()/*encodeArray, encodeArray.length*/, buffer.info.presentationTimeUs);
+//
+//                            long time1 = SystemClock.elapsedRealtime();
+//                            byte[] encodeArray = new byte[buffer.data.remaining()];
+//                            buffer.data.get(encodeArray);
+//                            long time2 = SystemClock.elapsedRealtime();
+//
+//                            mTotalNumber++;
+//                            mTotalTime += time2-time1;
+//                        } else if (mMp4v2Helper != null && buffer.info.presentationTimeUs >= mPresentationTimeUs) {
+//                            result = mMp4v2Helper.native_writeAudio(buffer.data, buffer.data.remaining()/*encodeArray, encodeArray.length*/, buffer.info.presentationTimeUs);
+//                        }
+//                    }
+//                }
+//
+//                if (result < 0) LogUtil.e(TAG, "write: encodeArray.length == " + buffer.data.remaining() + ", result = " + result);
+//                pool.recycle(buffer);
+//            }
         }
 
         /**
@@ -391,6 +523,10 @@ public class MediaEncoderEngine {
                     });
                 }
             }
+        }
+
+        public long getPresentationTimeUs() {
+            return mPresentationTimeUs;
         }
     }
 }

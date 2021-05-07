@@ -48,6 +48,8 @@ public class AudioMediaEncoder extends MediaEncoder {
     private long mDebugExecuteAvgDelay = 0;
     private Map<Long, Long> mDebugSendStartMap = new HashMap<>();
 
+    private int mFirstSample = 0;
+
     public AudioMediaEncoder(@NonNull AudioConfig config) {
         super(NAME_AUDIO);
         mConfig = config.copy();
@@ -81,6 +83,7 @@ public class AudioMediaEncoder extends MediaEncoder {
         mMediaCodec.configure(audioFormat, null, null,
                 MediaCodec.CONFIGURE_FLAG_ENCODE);
         mMediaCodec.start();
+        mFirstSample = 0;
     }
 
     @EncoderThread
@@ -226,14 +229,70 @@ public class AudioMediaEncoder extends MediaEncoder {
                         }
 
                         // Actual work
+//                        if (inputBuffer.isEndOfStream) {
+//                            acquireInputBuffer(inputBuffer);
+//                            encode(inputBuffer);
+//                            break encoding;
+//                        } else if (tryAcquireInputBuffer(inputBuffer)) {
+//                            encode(inputBuffer);
+//                        } else {
+//                            skipFrames(3);
+//                        }
                         if (inputBuffer.isEndOfStream) {
                             acquireInputBuffer(inputBuffer);
                             encode(inputBuffer);
                             break encoding;
-                        } else if (tryAcquireInputBuffer(inputBuffer)) {
-                            encode(inputBuffer);
                         } else {
-                            skipFrames(3);
+                            if (mFirstSample == 0) {
+                                mFirstSample = 1;
+
+                                if (tryAcquireInputBuffer(inputBuffer)) {
+                                    encode(inputBuffer);
+                                } else {
+                                    skipFrames(3);
+                                }
+                            } else {
+                                if (mFirstSample == 1) {
+                                    if (mController.getPresentationTimeUs() != 0) {
+                                        mFirstSample = 2;
+
+                                        int audioChannels = mConfig.channels;
+                                        int audioSampleRate = mConfig.samplingFrequency;
+                                        int durationUs = (int)(((inputBuffer.length / (audioChannels * 2.0)) / audioSampleRate) * 1000000);
+                                        long addSize = (inputBuffer.timestamp - mController.getPresentationTimeUs() + durationUs / 2) / durationUs;
+                                        while (addSize > 0) {
+                                            InputBuffer addInputBuffer = mInputBufferPool.get();
+                                            addInputBuffer.source = mByteBufferPool.get();
+                                            if (inputBuffer.length > addInputBuffer.source.remaining()) {
+                                                LogUtil.e("bbb", "source.capacity == " + addInputBuffer.source.capacity() + ", source.remaining == " + addInputBuffer.source.remaining() + ", inputBuffer.length === " + inputBuffer.length);
+                                            } else {
+                                                addInputBuffer.source.put(new byte[inputBuffer.length], 0, inputBuffer.length);
+                                            }
+                                            addInputBuffer.timestamp = inputBuffer.timestamp - durationUs * addSize;
+                                            addInputBuffer.length = inputBuffer.length;
+                                            addInputBuffer.isEndOfStream = inputBuffer.isEndOfStream;
+                                            if (tryAcquireInputBuffer(addInputBuffer)) {
+                                                encode(addInputBuffer);
+
+                                                addSize--;
+                                            } else
+                                                skipFrames(3);
+                                        }
+                                        if (tryAcquireInputBuffer(inputBuffer)) {
+                                            encode(inputBuffer);
+                                        } else {
+                                            skipFrames(3);
+                                        }
+                                    } else
+                                        skipFrames(3);
+                                } else {
+                                    if (tryAcquireInputBuffer(inputBuffer)) {
+                                        encode(inputBuffer);
+                                    } else {
+                                        skipFrames(3);
+                                    }
+                                }
+                            }
                         }
                     }
                 }

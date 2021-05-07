@@ -63,7 +63,7 @@ public class Full2PictureRecorder extends FullPictureRecorder
                 mPictureBuilder.setTag(CameraDevice.TEMPLATE_STILL_CAPTURE);
                 try {
                     holder.applyBuilder(this, mPictureBuilder);
-                } catch (CameraAccessException|IllegalStateException|IllegalArgumentException e) {
+                } catch (CameraAccessException e) {
                     mResult = null;
                     mError = e;
                     dispatchResult();

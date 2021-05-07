@@ -31,7 +31,7 @@ public class PictureResult {
         public Location location;
         public int rotation;
         public Size size;
-        public Facing facing;
+        public Facing[] facing;
         public byte[] data;
         public PictureFormat format;
     }
@@ -40,7 +40,7 @@ public class PictureResult {
     private final Location location;
     private final int rotation;
     private final Size size;
-    private final Facing facing;
+    private final Facing[] facing;
     private final byte[] data;
     private final PictureFormat format;
 
@@ -101,7 +101,7 @@ public class PictureResult {
      * @return the Facing of this video
      */
     @NonNull
-    public Facing getFacing() {
+    public Facing[] getFacing() {
         return facing;
     }
 

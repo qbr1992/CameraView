@@ -33,7 +33,7 @@ public class VideoResult {
         public Size size;
         public File file;
         public FileDescriptor fileDescriptor;
-        public Facing facing;
+        public Facing[] facing;
         public VideoCodec videoCodec;
         public Audio audio;
         public int endReason;
@@ -80,7 +80,7 @@ public class VideoResult {
     private final Size size;
     private final File file;
     private final FileDescriptor fileDescriptor;
-    private final Facing facing;
+    private final Facing[] facing;
     private final VideoCodec videoCodec;
     private final Audio audio;
     private final int endReason;
@@ -177,7 +177,7 @@ public class VideoResult {
      * @return the Facing of this video
      */
     @NonNull
-    public Facing getFacing() {
+    public Facing[] getFacing() {
         return facing;
     }
 

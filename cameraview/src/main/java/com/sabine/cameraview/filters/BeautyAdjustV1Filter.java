@@ -155,6 +155,7 @@ public class BeautyAdjustV1Filter extends BaseFilter implements OneParameterFilt
             "\n" +
             "    resultColor = lut3d(resultColor);\n" +
             "    gl_FragColor = mix(inputColor, resultColor, whiteOpacity);\n" +
+            "    gl_FragColor = vec4((gl_FragColor.rgb + vec3(0.05)), gl_FragColor.w);\n" +
             "}";
 
     private int blurTextureLocation = -1;
@@ -249,8 +250,8 @@ public class BeautyAdjustV1Filter extends BaseFilter implements OneParameterFilt
         whiteOpacityLocation = GLES20.glGetUniformLocation(programHandle, "whiteOpacity");
         Egloo.checkGlProgramLocation(whiteOpacityLocation, "whiteOpacity");
 
-//        if (context != null)
-//            lutTexture = OpenGLUtils.createTextureFromAssets(context, "texture/beautyLut_16_16.png");
+        if (context != null)
+            lutTexture = OpenGLUtils.createTextureFromAssets(context, "texture/beautyLut_16_16.png");
     }
 
     @Override

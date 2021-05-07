@@ -30,6 +30,10 @@ public class OrientationHelper {
     private final Context mContext;
     private final Callback mCallback;
 
+    private boolean isRecording = false;
+
+    private boolean mEnabled = false;
+
     @VisibleForTesting
     final OrientationEventListener mDeviceOrientationListener;
     private int mDeviceOrientation = -1;
@@ -53,6 +57,7 @@ public class OrientationHelper {
             @Override
             public void onOrientationChanged(int orientation) {
                 int deviceOrientation = 0;
+                if (isRecording) return;
                 if (orientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
                     deviceOrientation = mDeviceOrientation != -1 ? mDeviceOrientation : 0;
                 } else if (orientation >= 315 || orientation < 45) {
@@ -97,6 +102,7 @@ public class OrientationHelper {
      * Enables this listener.
      */
     public void enable() {
+        mEnabled = true;
         mDisplayOffset = findDisplayOffset();
         if (Build.VERSION.SDK_INT >= 17) {
             DisplayManager manager = (DisplayManager)
@@ -110,6 +116,7 @@ public class OrientationHelper {
      * Disables this listener.
      */
     public void disable() {
+        mEnabled = false;
         mDeviceOrientationListener.disable();
         if (Build.VERSION.SDK_INT >= 17) {
             DisplayManager manager = (DisplayManager)
@@ -120,6 +127,10 @@ public class OrientationHelper {
         mDeviceOrientation = -1;
     }
 
+    public boolean enabled() {
+        return mEnabled;
+    }
+
     /**
      * Returns the current device orientation.
      * @return device orientation
@@ -127,6 +138,10 @@ public class OrientationHelper {
     @SuppressWarnings("WeakerAccess")
     public int getLastDeviceOrientation() {
         return mDeviceOrientation;
+    }
+
+    public void setRecording(boolean recording) {
+        isRecording = recording;
     }
 
     /**

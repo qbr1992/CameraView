@@ -128,17 +128,17 @@ public class Camera1Engine extends CameraBaseEngine implements
 
     @EngineThread
     @Override
-    protected boolean collectCameraInfo(@NonNull Facing facing) {
-        int internalFacing = mMapper.mapFacing(facing);
+    protected boolean collectCameraInfo(@NonNull Facing... facings) {
+        int internalFacing = mMapper.mapFacing(facings[0]);
         LOG.i("collectCameraInfo",
-                "Facing:", facing,
+                "Facing:", facings[0],
                 "Internal:", internalFacing,
                 "Cameras:", Camera.getNumberOfCameras());
         Camera.CameraInfo cameraInfo = new Camera.CameraInfo();
         for (int i = 0, count = Camera.getNumberOfCameras(); i < count; i++) {
             Camera.getCameraInfo(i, cameraInfo);
             if (cameraInfo.facing == internalFacing) {
-                getAngles().setSensorOffset(facing, cameraInfo.orientation);
+                getAngles().setSensorOffset(facings[0], cameraInfo.orientation);
                 mCameraId = i;
                 return true;
             }
@@ -182,9 +182,9 @@ public class Camera1Engine extends CameraBaseEngine implements
         LOG.i("onStartBind:", "Started");
         try {
             if (mPreview.getOutputClass() == SurfaceHolder.class) {
-                mCamera.setPreviewDisplay((SurfaceHolder) mPreview.getOutput());
+                mCamera.setPreviewDisplay((SurfaceHolder) mPreview.getOutput(0));
             } else if (mPreview.getOutputClass() == SurfaceTexture.class) {
-                mCamera.setPreviewTexture((SurfaceTexture) mPreview.getOutput());
+                mCamera.setPreviewTexture((SurfaceTexture) mPreview.getOutput(0));
             } else {
                 throw new RuntimeException("Unknown CameraPreview output class.");
             }
@@ -361,7 +361,7 @@ public class Camera1Engine extends CameraBaseEngine implements
         stub.size = getUncroppedSnapshotSize(Reference.OUTPUT);
         if (mPreview instanceof RendererCameraPreview && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             stub.rotation = getAngles().offset(Reference.VIEW, Reference.OUTPUT, Axis.ABSOLUTE);
-            mPictureRecorder = new SnapshotGlPictureRecorder(stub, this,
+            mPictureRecorder = new SnapshotGlPictureRecorder(stub, this, this,
                     (RendererCameraPreview) mPreview, outputRatio, getOverlay());
         } else {
             stub.rotation = getAngles().offset(Reference.SENSOR, Reference.OUTPUT, Axis.RELATIVE_TO_SENSOR);
@@ -609,6 +609,11 @@ public class Camera1Engine extends CameraBaseEngine implements
         });
     }
 
+    @Override
+    public float getZoomValue() {
+        return mZoomValue;
+    }
+
     private boolean applyZoom(@NonNull Camera.Parameters params, float oldZoom) {
         if (mCameraOptions.isZoomSupported()) {
             float max = params.getMaxZoom();
@@ -643,6 +648,26 @@ public class Camera1Engine extends CameraBaseEngine implements
         });
     }
 
+    @Override
+    public void setExposureCorrection(float EVvalue, @NonNull float[] bounds, @Nullable PointF[] points, boolean notify, int index) {
+
+    }
+
+    @Override
+    public float getExposureCorrectionValue(int index) {
+        return 0;
+    }
+
+    @Override
+    public boolean isAutoExposure(int index) {
+        return false;
+    }
+
+    @Override
+    public boolean isAutoExposure() {
+        return false;
+    }
+
     private boolean applyExposureCorrection(@NonNull Camera.Parameters params,
                                             float oldExposureCorrection) {
         if (mCameraOptions.isExposureCorrectionSupported()) {
@@ -675,6 +700,45 @@ public class Camera1Engine extends CameraBaseEngine implements
                 applyPlaySounds(old);
             }
         });
+    }
+
+    @Override
+    public void selectOpenedCamera(PointF legacyPoint) {
+
+    }
+
+    @Override
+    public int getCurrentCameraIndex() {
+        return 0;
+    }
+
+    @Override
+    public int getCurrentCameraIndex(PointF legacyPoint) {
+        return 0;
+    }
+
+    private boolean setFaceDetection(boolean useFaceDetection) {
+        return false;
+    }
+
+    @Override
+    public boolean changeFaceDetection(boolean useFaceDetection) {
+        return false;
+    }
+
+    @Override
+    public void setFaceDetectionListener(FaceDetectionListener listener) {
+
+    }
+
+    @Override
+    public FACE_DETECT_MODE supportFaceDetection() {
+        return FACE_DETECT_MODE.unKnown;
+    }
+
+    @Override
+    public int getCameraOrientation() {
+        return 0;
     }
 
     @SuppressWarnings("UnusedReturnValue")
@@ -772,6 +836,12 @@ public class Camera1Engine extends CameraBaseEngine implements
         return (ByteBufferFrameManager) super.getFrameManager();
     }
 
+    @Nullable
+    @Override
+    public CameraOptions getCamera2Options() {
+        return null;
+    }
+
     @Override
     public void setHasFrameProcessors(boolean hasFrameProcessors) {
         // we don't care, FP is always on
@@ -782,6 +852,11 @@ public class Camera1Engine extends CameraBaseEngine implements
     public void setFrameProcessingFormat(int format) {
         // Ignore input: we only support NV21.
         mFrameProcessingFormat = ImageFormat.NV21;
+    }
+
+    @Override
+    public boolean dual() {
+        return false;
     }
 
     @Override

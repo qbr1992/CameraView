@@ -1,6 +1,7 @@
 package com.sabine.cameraview.preview;
 
 import android.content.Context;
+import android.graphics.RectF;
 import android.view.LayoutInflater;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -26,6 +27,11 @@ public class SurfaceCameraPreview extends CameraPreview<SurfaceView, SurfaceHold
 
     private boolean mDispatched;
     private View mRootView;
+
+    @Override
+    public void setBeauty(float parameterValue1, float parameterValue2) {
+
+    }
 
     public SurfaceCameraPreview(@NonNull Context context, @NonNull ViewGroup parent) {
         super(context, parent);
@@ -81,8 +87,18 @@ public class SurfaceCameraPreview extends CameraPreview<SurfaceView, SurfaceHold
 
     @NonNull
     @Override
-    public SurfaceHolder getOutput() {
+    public SurfaceHolder getOutput(int index) {
         return getView().getHolder();
+    }
+
+    @Override
+    public void removeInputSurfaceTexture(int index) {
+
+    }
+
+    @Override
+    public int getInputSurfaceTextureCount() {
+        return 1;
     }
 
     @NonNull
@@ -91,5 +107,39 @@ public class SurfaceCameraPreview extends CameraPreview<SurfaceView, SurfaceHold
         return SurfaceHolder.class;
     }
 
+    @Override
+    public boolean getFrontIsFirst() {
+        return false;
+    }
+
+    @Override
+    public void switchInputTexture() {
+
+    }
+
+    @Override
+    public RectF getSurfaceLayoutRect(int index) {
+        return new RectF(0, 0, getView().getWidth(), getView().getHeight());
+    }
+
+    @Override
+    public void resetOutputTextureDrawer() {
+
+    }
+
+    @Override
+    public void startPreview() {
+
+    }
+
+    @Override
+    public void setSensorTimestampOffset(long offset) {
+
+    }
+
+    @Override
+    public void addRendererFpsCallback(@NonNull RendererFpsCallback callback) {
+
+    }
 
 }

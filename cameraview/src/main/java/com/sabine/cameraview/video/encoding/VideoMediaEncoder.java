@@ -137,7 +137,8 @@ abstract class VideoMediaEncoder<C extends VideoConfig> extends MediaEncoder {
         // we use input buffers to signal the end. In the video case, we don't have input buffers
         // because we use an input surface instead.
         mMediaCodec.signalEndOfInputStream();
-        drainOutput(true);
+        //TODO:drainOutput放到videoEncoderThread线程中执行，取消下边一行代码
+//        drainOutput(true);
     }
 
     /**

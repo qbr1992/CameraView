@@ -33,9 +33,11 @@ public abstract class VideoRecorder {
         /**
          * The callback for the actual video recording starting.
          */
-        void onVideoRecordingStart();
+        void onVideoRecordingStart(long timestamp);
 
         void onVideoEncodeStart(int videoBitrate);
+
+        void onVideoFps(int fps);
 
         /**
          * Video recording has ended. We will finish processing the file
@@ -118,6 +120,8 @@ public abstract class VideoRecorder {
 
     protected abstract void onStart();
 
+    public void setScaleCrop(float scaleX, float scaleY) {}
+
     /**
      * Should stop recording as fast as possible. This can be called twice because the
      * shutdown boolean might be different.
@@ -161,10 +165,10 @@ public abstract class VideoRecorder {
      */
     @SuppressWarnings("WeakerAccess")
     @CallSuper
-    protected void dispatchVideoRecordingStart() {
+    protected void dispatchVideoRecordingStart(long timestamp) {
         LOG.i("dispatchVideoRecordingStart:", "About to dispatch.");
         if (mListener != null) {
-            mListener.onVideoRecordingStart();
+            mListener.onVideoRecordingStart(timestamp);
         }
     }
 
@@ -187,6 +191,13 @@ public abstract class VideoRecorder {
         LOG.i("dispatchVideoRecordingEnd:", "videoBitrate = " + videoBitrate);
         if (mListener != null) {
             mListener.onVideoEncodeStart(videoBitrate);
+        }
+    }
+
+    protected void dispatchVideoFps(int fps) {
+        LOG.i("dispatchVideoFps:", "fps = " + fps);
+        if (mListener != null) {
+            mListener.onVideoFps(fps);
         }
     }
 }

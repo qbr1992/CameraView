@@ -29,10 +29,13 @@ public class SensorController implements SensorEventListener {
 //    private boolean canFocus = false;
     private boolean canFocusIn = false;
     private boolean isFocusing = false;
+    private boolean camera2Focusing = false;
     private Calendar mCalendar;
     private final double moveIs = 1.4;
     private long lastStaticStamp = 0;
     public static final int DELAY_DURATION = 500;
+
+    private CameraView mCameraView;
 
     private SensorController(Context context) {
         mSensorManager = (SensorManager) context.getSystemService(Activity.SENSOR_SERVICE);
@@ -46,6 +49,10 @@ public class SensorController implements SensorEventListener {
             mInstance = new SensorController(context);
         }
         return mInstance;
+    }
+
+    public void setCameraView(CameraView cameraView) {
+        mCameraView = cameraView;
     }
 
     public void setCameraFocusListener(CameraFocusListener mCameraFocusListener) {
@@ -71,7 +78,7 @@ public class SensorController implements SensorEventListener {
             return;
         }
 
-        if (isFocusing) {
+        if (isFocusing && camera2Focusing) {
             restParams();
             return;
         }
@@ -100,7 +107,7 @@ public class SensorController implements SensorEventListener {
                     if (canFocusIn) {
                         if (stamp - lastStaticStamp > DELAY_DURATION) {
                             //移动后静止一段时间，可以发生对焦行为
-                            if (!isFocusing) {
+                            if (!isFocusing || (mCameraView.dual() && !camera2Focusing)) {
                                 canFocusIn = false;
 //                                onCameraFocus();
                                 if (mCameraFocusListener != null) {
@@ -141,8 +148,11 @@ public class SensorController implements SensorEventListener {
      * @return
      */
     public boolean isFocusLocked() {
-//        return canFocus && isFocusing;
-        return isFocusing;
+        if (mCameraView != null && mCameraView.dual()) {
+            return isFocusing || camera2Focusing;
+        } else {
+            return isFocusing;
+        }
     }
 
     /**
@@ -153,10 +163,24 @@ public class SensorController implements SensorEventListener {
     }
 
     /**
+     * 锁定camera2对焦
+     */
+    public void lockCamera2Focus() {
+        camera2Focusing = true;
+    }
+
+    /**
      * 解锁对焦
      */
     public void unlockFocus() {
         isFocusing = false;
+    }
+
+    /**
+     * 解锁对焦
+     */
+    public void unlockCamera2Focus() {
+        camera2Focusing = false;
     }
 
     public void restFocus() {

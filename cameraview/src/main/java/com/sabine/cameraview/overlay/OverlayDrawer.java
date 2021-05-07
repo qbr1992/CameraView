@@ -49,10 +49,10 @@ public class OverlayDrawer {
     public OverlayDrawer(@NonNull Overlay overlay, @NonNull Size size) {
         mOverlay = overlay;
         mTextureDrawer = new GlTextureDrawer();
-        mSurfaceTexture = new SurfaceTexture(mTextureDrawer.getTexture().getId());
+        mSurfaceTexture = new SurfaceTexture(mTextureDrawer.getTexture(0).getId());
         mSurfaceTexture.setDefaultBufferSize(size.getWidth(), size.getHeight());
         mSurface = new Surface(mSurfaceTexture);
-        mIssue514Workaround = new Issue514Workaround(mTextureDrawer.getTexture().getId());
+        mIssue514Workaround = new Issue514Workaround(mTextureDrawer.getTexture(0).getId());
     }
 
     /**
@@ -102,7 +102,7 @@ public class OverlayDrawer {
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
 
         synchronized (mIssue514WorkaroundLock) {
-            mTextureDrawer.draw(timestampUs);
+            mTextureDrawer.draw(timestampUs, 0);
         }
     }
 

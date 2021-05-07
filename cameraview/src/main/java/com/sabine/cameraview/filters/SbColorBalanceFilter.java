@@ -19,6 +19,9 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
             "uniform float redShift;\n" +
             "uniform float greenShift;\n" +
             "uniform float blueShift;\n" +
+            "uniform float saturation;\n" +
+            "uniform float hue;\n" +
+            "uniform float luminance;\n" +
             "float RGBToL(vec3 color)\n" +
             "{\n" +
                 "float fmin = min(min(color.r, color.g), color.b);    //Min. value of RGB\n" +
@@ -109,8 +112,13 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
                 "newColor = clamp(newColor, 0.0, 1.0);\n" +
                 "// preserve luminosity\n" +
                 "vec3 newHSL = RGBToHSL(newColor);\n" +
-                "float oldLum = RGBToL(textureColor.rgb);\n" +
-                "textureColor.rgb = HSLToRGB(vec3(newHSL.x, newHSL.y, oldLum));\n" +
+//                "float oldLum = RGBToL(textureColor.rgb);\n" +
+//                "textureColor.rgb = HSLToRGB(vec3(newHSL.x, newHSL.y, oldLum));\n" +
+                "newHSL.x += hue;\n" +
+                "newHSL.y *= 1.0 + saturation;\n" +
+                "newHSL.z = lightness * (1.0 + luminance);\n" +
+//                "textureColor.rgb = HSLToRGB(vec3(newHSL.x, newHSL.y, lightness));\n" +
+                "textureColor.rgb = HSLToRGB(newHSL);\n" +
                 "gl_FragColor = textureColor;\n" +
             "}";
 
@@ -120,7 +128,15 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
     private int redShiftLocation = -1;
     private int greenShiftLocation = -1;
     private int blueShiftLocation = -1;
-    private float[] redGreenBlueArr = {0, 0, 0};
+
+    //ADD:增加调整色调/对比度/亮度的参数
+    private float saturation = 0f;
+    private float hue = 0f;
+    private float luminance = 0f;
+    private int saturationLocation = -1;
+    private int hueLocation = -1;
+    private int luminanceLocation = -1;
+    private float[] redGreenBlueArr = {0, 0, 0, 0, 0, 0};
 
     public float getRedShift() {
         return redShift;
@@ -149,21 +165,51 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
         redGreenBlueArr[2] = blueShift;
     }
 
+    public float getSaturation() {
+        return saturation;
+    }
+
+    public void setSaturation(float saturation) {
+        this.saturation = saturation;
+        redGreenBlueArr[3] = saturation;
+    }
+
+    public float getHue() {
+        return hue;
+    }
+
+    public void setHue(float hue) {
+        this.hue = hue;
+        redGreenBlueArr[4] = hue;
+    }
+
+    public float getLuminance() {
+        return luminance;
+    }
+
+    public void setLuminance(float luminance) {
+        this.luminance = luminance;
+        redGreenBlueArr[5] = luminance;
+    }
+
     @Override
     public void setParameterMulti(float[] value) {
         redGreenBlueArr = value;
         redShift = value[0];
         greenShift = value[1];
         blueShift = value[2];
+        saturation = value[3];
+        hue = value[4];
+        luminance = value[5];
     }
 
     @Override
     public float[] getParameterMulti() {
-        if (redGreenBlueArr[0]==0 && redGreenBlueArr[1]==0 && redGreenBlueArr[2]==0) {
-            return null;
-        } else {
+//        if (redGreenBlueArr[0]==0 && redGreenBlueArr[1]==0 && redGreenBlueArr[2]==0) {
+//            return null;
+//        } else {
             return redGreenBlueArr;
-        }
+//        }
     }
 
     @NonNull
@@ -202,6 +248,12 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
         GlUtils.checkLocation(greenShiftLocation, "greenShift");
         blueShiftLocation = GLES20.glGetUniformLocation(programHandle, "blueShift");
         GlUtils.checkLocation(blueShiftLocation, "blueShift");
+        saturationLocation = GLES20.glGetUniformLocation(programHandle, "saturation");
+        GlUtils.checkLocation(saturationLocation, "saturation");
+        hueLocation = GLES20.glGetUniformLocation(programHandle, "hue");
+        GlUtils.checkLocation(hueLocation, "hue");
+        luminanceLocation = GLES20.glGetUniformLocation(programHandle, "luminance");
+        GlUtils.checkLocation(luminanceLocation, "luminance");
     }
 
     @Override
@@ -210,6 +262,9 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
         redShiftLocation = -1;
         greenShiftLocation = -1;
         blueShiftLocation = -1;
+        saturationLocation = -1;
+        hueLocation = -1;
+        luminanceLocation = -1;
     }
 
     @Override
@@ -220,6 +275,12 @@ public class SbColorBalanceFilter extends BaseFilter implements MultiParameterFi
         GLES20.glUniform1f(greenShiftLocation, greenShift);
         GlUtils.checkError("glUniform1f");
         GLES20.glUniform1f(blueShiftLocation, blueShift);
+        GlUtils.checkError("glUniform1f");
+        GLES20.glUniform1f(saturationLocation, saturation);
+        GlUtils.checkError("glUniform1f");
+        GLES20.glUniform1f(hueLocation, hue);
+        GlUtils.checkError("glUniform1f");
+        GLES20.glUniform1f(luminanceLocation, luminance);
         GlUtils.checkError("glUniform1f");
     }
 

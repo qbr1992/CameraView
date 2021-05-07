@@ -2,11 +2,10 @@ package com.sabine.cameraview.picture;
 
 import android.annotation.TargetApi;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
-import android.opengl.Matrix;
+import android.opengl.GLES20;
 import android.os.Build;
 import android.view.Surface;
 
@@ -14,11 +13,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import com.otaliastudios.opengl.surface.EglSurface;
+import com.otaliastudios.opengl.texture.GlTexture;
 import com.sabine.cameraview.PictureResult;
+import com.sabine.cameraview.engine.CameraEngine;
 import com.sabine.cameraview.engine.offset.Reference;
 import com.sabine.cameraview.filter.Filter;
-import com.sabine.cameraview.internal.CropHelper;
-import com.sabine.cameraview.internal.GlTextureDrawer;
+import com.sabine.cameraview.internal.GlUtils;
 import com.sabine.cameraview.internal.WorkerHandler;
 import com.sabine.cameraview.overlay.Overlay;
 import com.sabine.cameraview.overlay.OverlayDrawer;
@@ -26,10 +27,10 @@ import com.sabine.cameraview.preview.RendererCameraPreview;
 import com.sabine.cameraview.preview.RendererFrameCallback;
 import com.sabine.cameraview.preview.RendererThread;
 import com.sabine.cameraview.size.AspectRatio;
-import com.sabine.cameraview.size.Size;
-import com.otaliastudios.opengl.core.EglCore;
-import com.otaliastudios.opengl.surface.EglSurface;
-import com.otaliastudios.opengl.surface.EglWindowSurface;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * API 19.
@@ -52,21 +53,25 @@ import com.otaliastudios.opengl.surface.EglWindowSurface;
  */
 public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
 
+    private CameraEngine mEngine;
     private RendererCameraPreview mPreview;
     private AspectRatio mOutputRatio;
 
     private Overlay mOverlay;
     private boolean mHasOverlay;
     private OverlayDrawer mOverlayDrawer;
-    private GlTextureDrawer mTextureDrawer;
+
+    private ByteArrayOutputStream bos;
 
     public SnapshotGlPictureRecorder(
             @NonNull PictureResult.Stub stub,
+            @NonNull CameraEngine engine,
             @Nullable PictureResultListener listener,
             @NonNull RendererCameraPreview preview,
             @NonNull AspectRatio outputRatio,
             @Nullable Overlay overlay) {
         super(stub, listener);
+        mEngine = engine;
         mPreview = preview;
         mOutputRatio = outputRatio;
         mOverlay = overlay;
@@ -79,8 +84,8 @@ public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
         mPreview.addRendererFrameCallback(new RendererFrameCallback() {
 
             @RendererThread
-            public void onRendererTextureCreated(int textureId) {
-                SnapshotGlPictureRecorder.this.onRendererTextureCreated(textureId);
+            public void onRendererTextureCreated(int textureId, boolean frontIsFirst) {
+                SnapshotGlPictureRecorder.this.onRendererTextureCreated(textureId, frontIsFirst);
             }
 
             @RendererThread
@@ -89,26 +94,31 @@ public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
                 SnapshotGlPictureRecorder.this.onRendererFilterChanged(filter, filterLevel);
             }
 
+            @Override
+            public void onRendererInputTextureIdChanged(@NonNull int textureId) {
+
+            }
+
+            @Override
+            public void onRendererSwitchInputTexture() {
+
+            }
+
             @RendererThread
             @Override
-            public void onRendererFrame(@NonNull SurfaceTexture surfaceTexture,
-                                        int rotation, float scaleX, float scaleY) {
+            public void onRendererFrame(@NonNull SurfaceTexture surfaceTexture, long timestampNanos,
+                                        int rotation, float scaleX, float scaleY, GlTexture inputTextureId) {
                 mPreview.removeRendererFrameCallback(this);
                 SnapshotGlPictureRecorder.this.onRendererFrame(surfaceTexture,
                         rotation, scaleX, scaleY);
             }
-
         });
     }
 
     @SuppressWarnings("WeakerAccess")
     @RendererThread
     @TargetApi(Build.VERSION_CODES.KITKAT)
-    protected void onRendererTextureCreated(int textureId) {
-        mTextureDrawer = new GlTextureDrawer(textureId);
-        // Need to crop the size.
-        Rect crop = CropHelper.computeCrop(mResult.size, mOutputRatio);
-        mResult.size = new Size(crop.width(), crop.height());
+    protected void onRendererTextureCreated(int textureId, boolean frontIsFirst) {
         if (mHasOverlay) {
             mOverlayDrawer = new OverlayDrawer(mOverlay, mResult.size);
         }
@@ -118,7 +128,6 @@ public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
     @RendererThread
     @TargetApi(Build.VERSION_CODES.KITKAT)
     protected void onRendererFilterChanged(@NonNull Filter filter, float filterLevel) {
-        if (mTextureDrawer != null) mTextureDrawer.setFilter(filter.copy());
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -132,6 +141,28 @@ public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
         // the textureId and the overlayTextureId, managed by the GlSurfaceView.
         // Next operations can then be performed on different threads using this handle.
         final EGLContext eglContext = EGL14.eglGetCurrentContext();
+
+        int width = mResult.size.getWidth();
+        int height = mResult.size.getHeight();
+        ByteBuffer buf = ByteBuffer.allocateDirect(width * height * 4);
+        buf.order(ByteOrder.LITTLE_ENDIAN);
+        GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE,
+                buf);
+        GlUtils.checkError("glReadPixels");
+        buf.rewind();
+
+        bos = new ByteArrayOutputStream(buf.array().length);
+        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        bmp.copyPixelsFromBuffer(buf);
+
+        float flipScale = -1.0f;
+        android.graphics.Matrix mx = new android.graphics.Matrix();
+        mx.setScale(1.0f, flipScale);
+        bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), mx, true);
+
+        bmp.compress(Bitmap.CompressFormat.JPEG, 90, bos);
+        bmp.recycle();
+
         WorkerHandler.execute(new Runnable() {
             @Override
             public void run() {
@@ -172,65 +203,17 @@ public class SnapshotGlPictureRecorder extends SnapshotPictureRecorder {
                              float scaleX,
                              float scaleY,
                              @NonNull EGLContext eglContext) {
-
-        // 0. EGL window will need an output.
-        // We create a fake one as explained in javadocs.
-        final int fakeOutputTextureId = 9999;
-        SurfaceTexture fakeOutputSurface = new SurfaceTexture(fakeOutputTextureId);
-        fakeOutputSurface.setDefaultBufferSize(mResult.size.getWidth(), mResult.size.getHeight());
-
-        // 1. Create an EGL surface
-        final EglCore core = new EglCore(eglContext, EglCore.FLAG_RECORDABLE);
-        final EglSurface eglSurface = new EglWindowSurface(core, fakeOutputSurface);
-        eglSurface.makeCurrent();
-        final float[] transform = mTextureDrawer.getTextureTransform();
-
-        // 2. Apply preview transformations
-        surfaceTexture.getTransformMatrix(transform);
-        float scaleTranslX = (1F - scaleX) / 2F;
-        float scaleTranslY = (1F - scaleY) / 2F;
-        Matrix.translateM(transform, 0, scaleTranslX, scaleTranslY, 0);
-        Matrix.scaleM(transform, 0, scaleX, scaleY, 1);
-
-        // 3. Apply rotation and flip
-        // If this doesn't work, rotate "rotation" before scaling, like GlCameraPreview does.
-        Matrix.translateM(transform, 0, 0.5F, 0.5F, 0); // Go back to 0,0
-        Matrix.rotateM(transform, 0, rotation + mResult.rotation, 0, 0, 1); // Rotate to OUTPUT
-        Matrix.scaleM(transform, 0, 1, -1, 1); // Vertical flip because we'll use glReadPixels
-        Matrix.translateM(transform, 0, -0.5F, -0.5F, 0); // Go back to old position
-
-        // 4. Do pretty much the same for overlays
-        if (mHasOverlay) {
-            // 1. First we must draw on the texture and get latest image
-            mOverlayDrawer.draw(Overlay.Target.PICTURE_SNAPSHOT);
-
-            // 2. Then we can apply the transformations
-            Matrix.translateM(mOverlayDrawer.getTransform(), 0, 0.5F, 0.5F, 0);
-            Matrix.rotateM(mOverlayDrawer.getTransform(), 0, mResult.rotation, 0, 0, 1);
-            Matrix.scaleM(mOverlayDrawer.getTransform(), 0, 1, -1, 1); // Vertical flip because we'll use glReadPixels
-            Matrix.translateM(mOverlayDrawer.getTransform(), 0, -0.5F, -0.5F, 0);
+        if (bos!=null) {
+            mResult.rotation = 0;
+            mResult.data = bos.toByteArray();
+            dispatchResult();
         }
-        mResult.rotation = 0;
-
-        // 5. Draw and save
-        long timestampUs = surfaceTexture.getTimestamp() / 1000L;
-        LOG.i("takeFrame:", "timestampUs:", timestampUs);
-        mTextureDrawer.draw(timestampUs);
-        if (mHasOverlay) mOverlayDrawer.render(timestampUs);
-        mResult.data = eglSurface.toByteArray(Bitmap.CompressFormat.JPEG);
-
-        // 6. Cleanup
-        eglSurface.release();
-        mTextureDrawer.release();
-        fakeOutputSurface.release();
-        if (mHasOverlay) mOverlayDrawer.release();
-        core.release();
-        dispatchResult();
     }
 
     @Override
     protected void dispatchResult() {
         mOutputRatio = null;
+        bos = null;
         super.dispatchResult();
     }
 }
